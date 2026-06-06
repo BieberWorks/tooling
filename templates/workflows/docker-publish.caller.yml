@@ -1,0 +1,10 @@
+name: Docker Publish
+on:
+  push:
+    branches: [main, staging, dev]
+jobs:
+  docker:
+    uses: BieberWorks/tooling/.github/workflows/docker-publish.yml@main
+    secrets: inherit
+    with:
+      dockerfile: Dockerfile

@@ -1,0 +1,7 @@
+<Project>
+  <!-- Zur Repo-Root-Props verketten, damit UseArtifactsOutput auch fuer Tests greift. -->
+  <Import Project="$([MSBuild]::GetPathOfFileAbove('Directory.Build.props', '$(MSBuildThisFileDirectory)../'))" />
+  <PropertyGroup>
+    <IsPackable>false</IsPackable>
+  </PropertyGroup>
+</Project>

@@ -1,0 +1,8 @@
+name: Release & Publish
+on:
+  push:
+    branches: [main, staging]
+jobs:
+  release:
+    uses: BieberWorks/tooling/.github/workflows/nuget-release.yml@main
+    secrets: inherit

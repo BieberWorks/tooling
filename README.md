@@ -30,14 +30,27 @@ jobs:
 
 ## Setup-Scripts (`powershell/`, `bash/`)
 
-`powershell/github/init-nuget-repo.ps1` legt ein neues SDK-Repo an (Branch-Flow,
-Caller-Workflows, LICENSE, `Directory.Build.props`). Mit `-Template <shortName>`
-entsteht statt einer NuGet-Modul-Hülle ein App-Host via `dotnet new`.
+Modulares Repo-Setup nach dem Flow **Create-Repo → Add-Publish**. Jedes Script ist
+ein dünner Wrapper; die Logik liegt zentral (PS-Modul [`BieberWorks.RepoSetup`](powershell/modules/BieberWorks.RepoSetup)
+bzw. Bash-Lib [`bash/lib/repo-setup.sh`](bash/lib/repo-setup.sh)), die statischen
+Datei-Inhalte als Single-Source unter [`templates/`](templates) — kein Doppel-Code,
+1:1 in PowerShell **und** Bash.
+
+| Schicht | PowerShell | Bash | Wirkung |
+|---|---|---|---|
+| Basis | `create-repo.ps1` | `create-repo.sh` | Gerüst + build/test-CI, Remote-Repo, Branches **immer** main/staging/dev (Default `dev`) |
+| Pakete | `add-package-deployment.ps1` | `add-package-deployment.sh` | NuGet-Release-Workflow (staging=`-rc`, main=final) |
+| Docker | `add-docker-publish.ps1` | `add-docker-publish.sh` | Docker-Publish-Workflow (Image → GHCR) |
 
 ```powershell
-.\init-nuget-repo.ps1 -RepoName <Name>                       # NuGet-Modul
-.\init-nuget-repo.ps1 -RepoName <Name> -Template bieberworks-api  # App-Host
+.\create-repo.ps1 -RepoName Users        # Basis-Repo (privat; -Public für Branch Protection)
+cd Users
+..\add-package-deployment.ps1            # optional: NuGet-Release
+..\add-docker-publish.ps1                # optional: Docker-Publish
 ```
+
+Die `add-*`-Scripts laufen im aktuellen Repo-Ordner → auch auf bestehende Repos
+anwendbar. Details: [`powershell/github`](powershell/github) · [`bash/github`](bash/github).
 
 ## Lizenz
 

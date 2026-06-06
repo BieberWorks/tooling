@@ -1,0 +1,21 @@
+# Multi-stage Build fuer .NET (__REPO__). Pfade/Assembly an dein Projekt anpassen.
+# Der reusable docker-publish-Workflow reicht PACKAGES_TOKEN als BuildKit-Secret
+# 'nuget_token' in den Restore (private BieberWorks-Pakete), ohne es zu leaken.
+
+FROM mcr.microsoft.com/dotnet/sdk:10.0 AS build
+WORKDIR /src
+COPY . .
+
+# Privater Feed via BuildKit-Secret (kein Token in der Image-History):
+#   RUN --mount=type=secret,id=nuget_token \
+#     dotnet nuget add source "https://nuget.pkg.github.com/__ORG__/index.json" \
+#       --name bieberworks --username __USER__ \
+#       --password "$(cat /run/secrets/nuget_token)" --store-password-in-clear-text
+RUN dotnet restore
+RUN dotnet publish -c Release -o /app --no-restore
+
+FROM mcr.microsoft.com/dotnet/aspnet:10.0
+WORKDIR /app
+COPY --from=build /app .
+# ENTRYPOINT an dein Start-Assembly anpassen:
+# ENTRYPOINT ["dotnet", "__REPO__.dll"]

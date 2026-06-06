@@ -1,34 +1,40 @@
-# 🚀 GitHub Repository Initializer (PowerShell)
+# Repo-Setup-Scripts (PowerShell)
 
-Dieses Skript automatisiert das Erstellen eines neuen GitHub-Repositories unter Windows inklusive Best-Practice Branch-Struktur, Branch-Protections und fertigen CI/CD-Pipelines für Docker und Versionierung.
+Modulares Setup neuer **BieberWorks-SDK-Repos**. Die Scripts sind duenne Wrapper
+um das Modul [`BieberWorks.RepoSetup`](../modules/BieberWorks.RepoSetup) — die
+gesamte Logik (und die statischen Datei-Inhalte unter [`../../templates`](../../templates))
+liegt zentral, kein Doppel-Code. Eine 1:1-Bash-Variante liegt unter [`../../bash/github`](../../bash/github).
 
-## 📦 Globale Einrichtung (Funktion)
-
-Füge diese Funktion in dein PowerShell-Profil ein. Du öffnest dein Profil am schnellsten im Editor mit dem Befehl `notepad $PROFILE`.
+## Flow: Create-Repo -> Add-Publish
 
 ```powershell
-function New-GitHubRepo {
-    param(
-        [Parameter(Mandatory=$true)]
-        [string]$RepoName
-    )
-    # Lädt den Code von GitHub und führt ihn im aktuellen Kontext aus
-    $Url = "https://raw.githubusercontent.com/p-bieber/dev-scripts/main/powershell/github/init-repo.ps1"
-    $Script = Invoke-RestMethod -Uri $Url
-    Invoke-Expression ([scriptblock]::Create($Script)) -ArgumentList $RepoName
-}
+# 1. Basis-Repo anlegen (Geruest + build/test-CI, Remote, Branches main/staging/dev, Default dev)
+.\create-repo.ps1 -RepoName Users                 # privat (default), Org BieberWorks
+.\create-repo.ps1 -RepoName Users -Public         # oeffentlich (ermoeglicht Branch Protection)
+
+# 2. Release-Schicht(en) im Repo-Ordner ergaenzen
+cd Users
+..\add-package-deployment.ps1                      # NuGet-Release (staging=-rc, main=final)
+..\add-docker-publish.ps1                          # Docker-Image -> GHCR
 ```
 
-## 🛠️ Nutzung
+## Scripts
 
-Öffne eine neue PowerShell-Instanz und führe den Befehl aus:
-```PowerShell
-New-GitHubRepo mein-neues-projekt
+| Script | Wirkung |
+|---|---|
+| `create-repo.ps1` | Ordner + `git init`; LICENSE, `.gitignore`, README, `Directory.Build.props`, `src/`/`tests/`/`docs/`, `nuget.config`, `ci.yml` (build/test-Caller). `gh repo create` + Push, Branches **immer** main/staging/dev (Default `dev`), Branch-Protection nur bei `-Public`. |
+| `add-package-deployment.ps1` | Ergaenzt `release.yml` (Caller -> `nuget-release.yml`) im aktuellen Repo. `Directory.Build.props` nur falls fehlend. Commit + Push. |
+| `add-docker-publish.ps1` | Ergaenzt `docker-publish.yml` (Caller -> `docker-publish.yml`). `Dockerfile`/`.dockerignore` nur falls fehlend (kein Ueberschreiben). Commit + Push. |
+
+Die Add-Scripts laufen im **aktuellen** Repo-Ordner und sind dadurch auch auf
+bestehende Repos anwendbar.
+
+## Hinweis: PACKAGES_TOKEN
+
+Sobald ein Repo interne BieberWorks-Pakete referenziert, muss das Repo-Secret
+`PACKAGES_TOKEN` (PAT, `read:packages`) gesetzt sein — `create-repo.ps1` erinnert
+am Ende daran:
+
+```powershell
+gh secret set PACKAGES_TOKEN --repo BieberWorks/<RepoName>
 ```
-
-## 🤖 Features
-
-   - Erstellt die Branches main ← staging ← dev (Default branch).
-   - Schützt alle drei Branches vor direkten Pushes (Admins ausgenommen).
-   - Generiert die Ordnerstruktur src/, tests/, docs/, deploy/.
-   - Fügt automatische Docker-Builds (GHCR) und Semantic-Versioning hinzu.

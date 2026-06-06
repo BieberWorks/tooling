@@ -1,0 +1,6 @@
+
+# --- BieberWorks ---
+artifacts/
+local-nuget-feed/
+*.env
+.env.*
