@@ -4,7 +4,7 @@ name: .NET CI (reusable)
 # Aufruf:
 #   jobs:
 #     ci:
-#       uses: BieberWorks/tooling/.github/workflows/dotnet-ci.yml@main
+#       uses: BieberWorks/tooling/.github/workflows/dotnet-ci.yml@v1
 #       secrets: inherit
 #       with:
 #         run_tests: true   # false fuer App-Hosts ohne Tests

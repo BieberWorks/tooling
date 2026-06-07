@@ -8,9 +8,9 @@ Enthält **keine** Secrets — Tokens kommen via `secrets: inherit` aus dem nutz
 
 | Workflow | Zweck | Aufruf |
 |---|---|---|
-| `nuget-release.yml` | Tagging + Pack + Push (GitHub Packages) + Release | `uses: BieberWorks/tooling/.github/workflows/nuget-release.yml@main` |
-| `dotnet-ci.yml` | Build (+ optional Test) gegen GitHub Packages | `uses: BieberWorks/tooling/.github/workflows/dotnet-ci.yml@main` |
-| `docker-publish.yml` | Image bauen + nach GHCR pushen (BuildKit-Secret für privaten Restore) | `uses: BieberWorks/tooling/.github/workflows/docker-publish.yml@main` |
+| `nuget-release.yml` | Tagging + Pack + Push (GitHub Packages) + Release | `uses: BieberWorks/tooling/.github/workflows/nuget-release.yml@v1` |
+| `dotnet-ci.yml` | Build (+ optional Test) gegen GitHub Packages | `uses: BieberWorks/tooling/.github/workflows/dotnet-ci.yml@v1` |
+| `docker-publish.yml` | Image bauen + nach GHCR pushen (BuildKit-Secret für privaten Restore) | `uses: BieberWorks/tooling/.github/workflows/docker-publish.yml@v1` |
 
 Beispiel-Caller in einem Modul-Repo (`.github/workflows/release.yml`):
 ```yaml
@@ -23,13 +23,13 @@ jobs:
     permissions:        # nötig: Repo-Default ist read, reusable Workflows erben nur vom Caller
       contents: write
       packages: write
-    uses: BieberWorks/tooling/.github/workflows/nuget-release.yml@main
+    uses: BieberWorks/tooling/.github/workflows/nuget-release.yml@v1
     secrets: inherit
 ```
 
-> **Versionierung:** Caller referenzieren aktuell `@main` (immer aktuell, kein Drift).
-> Sobald die Workflows stabil sind, kann auf einen Tag (`@v1`) gepinnt werden, damit
-> Änderungen nicht alle Repos auf einmal treffen.
+> **Versionierung:** Caller pinnen auf den Major-Tag `@v1` (stabil; Änderungen am
+> Tooling treffen die Repos erst, wenn `v1` neu gesetzt wird — kein ungewollter Drift
+> über alle Repos auf einmal). Breaking Changes künftig über `@v2`.
 
 ## Setup-Scripts (`powershell/`, `bash/`)
 

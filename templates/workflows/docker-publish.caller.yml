@@ -7,7 +7,7 @@ jobs:
     permissions:        # nötig: Repo-Default ist read, reusable Workflows erben nur vom Caller
       contents: read
       packages: write
-    uses: BieberWorks/tooling/.github/workflows/docker-publish.yml@main
+    uses: BieberWorks/tooling/.github/workflows/docker-publish.yml@v1
     secrets: inherit
     with:
       dockerfile: Dockerfile

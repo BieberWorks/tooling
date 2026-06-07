@@ -7,7 +7,7 @@ name: Docker Publish (reusable)
 # Aufruf:
 #   jobs:
 #     docker:
-#       uses: BieberWorks/tooling/.github/workflows/docker-publish.yml@main
+#       uses: BieberWorks/tooling/.github/workflows/docker-publish.yml@v1
 #       secrets: inherit
 #       with:
 #         dockerfile: Dockerfile

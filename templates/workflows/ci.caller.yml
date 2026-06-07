@@ -4,5 +4,5 @@ on:
     branches: [dev, staging, main]
 jobs:
   ci:
-    uses: BieberWorks/tooling/.github/workflows/dotnet-ci.yml@main
+    uses: BieberWorks/tooling/.github/workflows/dotnet-ci.yml@v1
     secrets: inherit
