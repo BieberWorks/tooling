@@ -4,5 +4,8 @@ on:
     branches: [main, staging]
 jobs:
   release:
+    permissions:
+      contents: write
+      packages: write
     uses: BieberWorks/tooling/.github/workflows/nuget-release.yml@main
     secrets: inherit

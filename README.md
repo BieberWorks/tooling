@@ -20,6 +20,9 @@ on:
     branches: [main, staging]
 jobs:
   release:
+    permissions:        # nötig: Repo-Default ist read, reusable Workflows erben nur vom Caller
+      contents: write
+      packages: write
     uses: BieberWorks/tooling/.github/workflows/nuget-release.yml@main
     secrets: inherit
 ```
