@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
-# Legt ein neues BieberWorks-SDK-Repo an: Basis-Geruest + build/test-CI,
-# Remote-Repo in der Org, Branches main/staging/dev (Default dev).
-# Danach im Repo-Ordner: add-package-deployment.sh und/oder add-docker-publish.sh
+# Legt ein neues BieberWorks-SDK-Repo an: Basis-Geruest + build/test-CI +
+# leere Standard-Ordner (src/tests/docs) + Solution. Branches main/staging/dev (Default dev).
+# Danach im Repo-Ordner optional: add-package-deployment.sh und/oder add-docker-publish.sh
 #
 #   ./create-repo.sh <RepoName>                    # privat (default), Org BieberWorks
 #   ./create-repo.sh <RepoName> --org <Org> --public
@@ -27,4 +27,4 @@ if [ -z "$REPO_NAME" ]; then
   exit 1
 fi
 
-bw_new_repo_base "$REPO_NAME" "$ORG" "$VIS"
+bw_new_repo "$REPO_NAME" "$ORG" "$VIS"

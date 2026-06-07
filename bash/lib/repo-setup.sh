@@ -3,6 +3,12 @@
 # Geteilte Bausteine fuer das Setup neuer BieberWorks-SDK-Repos.
 # Die duennen Scripts unter bash/github/ sourcen nur diese Datei.
 # Statische Datei-Inhalte leben als Single-Source unter ../../templates/.
+#
+# Schicht-Architektur:
+#   bw_new_repo_base     -> Basis-Geruest (Files + CI + Branches main/staging/dev + Default dev)
+#   bw_new_repo          -> Base + leere src/tests/docs + .slnx  (blanko-Repo)
+#   bw_new_template_repo -> Base + dotnet new <Template> + .slnx + Deploy (api/app/web/module)
+#   bw_add_package_deployment / bw_add_docker_publish -> Deployment-Workflows (standalone nutzbar)
 
 set -euo pipefail
 
@@ -55,6 +61,43 @@ bw_commit_push() {
   git push origin "$branch"
 }
 
+# Fuegt eine Datei als <File>-Eintrag in einen Solution-Folder einer .slnx ein.
+# Legt den Folder an, falls er fehlt. Idempotent. Nur falls .slnx existiert.
+#   bw_slnx_add_item <slnx> <folder "/SolutionItems/docker/"> <file>
+bw_slnx_add_item() {
+  local slnx="$1" folder="$2" file="$3" tmp
+  [ -f "$slnx" ] || return 0
+  tmp="$(mktemp)"
+  if grep -qF "Name=\"$folder\"" "$slnx"; then
+    # Folder existiert: File nach der Folder-Oeffnungszeile einfuegen (falls noch nicht da)
+    if awk -v f="$folder" -v p="$file" '
+        index($0, "Name=\"" f "\"") { infolder=1 }
+        infolder && index($0, "Path=\"" p "\"") { found=1 }
+        END { exit(found ? 0 : 1) }' "$slnx"; then
+      rm -f "$tmp"; return 0
+    fi
+    awk -v f="$folder" -v p="$file" '
+      { print }
+      !done && index($0, "Name=\"" f "\"") {
+        match($0, /^[[:space:]]*/); indent = substr($0, 1, RLENGTH)
+        print indent "  <File Path=\"" p "\" />"
+        done = 1
+      }' "$slnx" > "$tmp"
+    mv "$tmp" "$slnx"
+  else
+    # Folder fehlt: kompletten Block vor </Solution> einfuegen
+    awk -v f="$folder" -v p="$file" '
+      !done && index($0, "</Solution>") {
+        print "  <Folder Name=\"" f "\">"
+        print "    <File Path=\"" p "\" />"
+        print "  </Folder>"
+        done = 1
+      }
+      { print }' "$slnx" > "$tmp"
+    mv "$tmp" "$slnx"
+  fi
+}
+
 bw_packages_token_hint() {
   local org="$1" repo="$2"
   echo ""
@@ -65,7 +108,7 @@ bw_packages_token_hint() {
   echo ""
 }
 
-# --- Schicht 1: Basis-Repo --------------------------------------------------
+# --- Schicht 0: Basis-Repo (Files + CI + Branches, KEINE src/tests/docs) ----
 
 # bw_new_repo_base <RepoName> [Org=BieberWorks] [public|private]
 bw_new_repo_base() {
@@ -86,18 +129,15 @@ bw_new_repo_base() {
   cd "$repo"
   git init -b main
 
-  # 2. Ordnerstruktur (jedes Repo ist baubar/testbar)
-  echo "==> Erstelle Ordnerstruktur..."
-  mkdir -p .github/workflows src tests docs
-  touch src/.gitkeep tests/.gitkeep docs/.gitkeep
+  # 2. Nur der Workflows-Ordner (src/tests/docs kommen erst in bw_new_repo / -template_repo)
+  mkdir -p .github/workflows
 
   # 3. LICENSE, README, nuget.config, Directory.Build.props
-  echo "==> Lege LICENSE, README, nuget.config, Directory.Build.props an..."
+  echo "==> Lege LICENSE, README, nuget.config, Directory.Build.props, CI an..."
   bw_install_template "LICENSE.tmpl"               "LICENSE"
   bw_install_template "README.module.tmpl"         "README.md"
   bw_install_template "nuget.config"               "nuget.config"
   bw_install_template "Directory.Build.props.tmpl" "Directory.Build.props"
-  bw_install_template "tests.Directory.Build.props" "tests/Directory.Build.props"
 
   # 4. .gitignore - VisualStudio-Basis (offiziell) + BieberWorks-Anhang
   if curl -fsSL "https://raw.githubusercontent.com/github/gitignore/main/VisualStudio.gitignore" -o .gitignore; then
@@ -108,7 +148,7 @@ bw_new_repo_base() {
   fi
   bw_expand_template "gitignore.append" >> .gitignore
 
-  # 5. CI (build/test) - Caller auf den reusable Workflow
+  # 5. CI (build/test) - Caller auf den reusable Workflow (run_tests default true)
   bw_install_template "workflows/ci.caller.yml" ".github/workflows/ci.yml"
 
   # 6. Initialer Commit + Remote-Repo + Push (pusht main)
@@ -144,8 +184,58 @@ bw_new_repo_base() {
   fi
 
   bw_packages_token_hint "$org" "$repo"
+  echo "==> Basis steht (Branch: dev)."
+}
+
+# --- Schicht 1a: Blanko-Repo (Base + leere Ordner + .slnx) ------------------
+
+# bw_new_repo <RepoName> [Org=BieberWorks] [public|private]
+bw_new_repo() {
+  local repo="$1" org="${2:-BieberWorks}" vis="${3:-private}"
+  bw_new_repo_base "$repo" "$org" "$vis"
+
+  echo "==> Lege leere Standard-Ordner (src/tests/docs) + Solution an..."
+  local folder
+  for folder in src tests docs; do
+    mkdir -p "$folder"
+    touch "$folder/.gitkeep"
+  done
+  bw_install_template "tests.Directory.Build.props" "tests/Directory.Build.props"
+  bw_install_template "solution.slnx.tmpl"          "$repo.slnx"
+
+  bw_commit_push "chore: add solution skeleton (src/tests/docs, slnx)"
   echo "==> Fertig! '$org/$repo' steht bereit (Branch: dev)."
-  echo "    Naechster Schritt: add-package-deployment.sh und/oder add-docker-publish.sh im Repo-Ordner."
+}
+
+# --- Schicht 1b: Typ-Repo via dotnet-new-Template + Deployment ---------------
+
+# bw_new_template_repo <RepoName> <Template-ShortName> <docker|packages> [Org] [public|private]
+bw_new_template_repo() {
+  local repo="$1" template="$2" deploy="$3" org="${4:-BieberWorks}" vis="${5:-private}"
+  bw_new_repo_base "$repo" "$org" "$vis"
+
+  echo "==> Solution-Geruest + 'dotnet new $template'..."
+  mkdir -p docs; touch docs/.gitkeep
+  bw_install_template "solution.slnx.tmpl" "$repo.slnx"
+
+  # Template instanziieren in den Repo-Root. Das Template bringt seine Projekte
+  # unter src/<Name> (+ tests/<Name>.Tests) mit; KEINE repo-globalen Dateien
+  # (die liefert die Basis) und KEINE eigene .slnx.
+  dotnet new "$template" -n "$repo" -o .
+
+  # Alle erzeugten csproj in die Solution aufnehmen (src/ und tests/ getrennt).
+  local csproj
+  while IFS= read -r csproj; do
+    [ -n "$csproj" ] && dotnet sln "$repo.slnx" add "$csproj" --solution-folder src
+  done < <(find src -name '*.csproj' 2>/dev/null || true)
+  while IFS= read -r csproj; do
+    [ -n "$csproj" ] && dotnet sln "$repo.slnx" add "$csproj" --solution-folder tests
+  done < <(find tests -name '*.csproj' 2>/dev/null || true)
+
+  bw_commit_push "chore: scaffold $template project + solution"
+
+  if [ "$deploy" = "docker" ]; then bw_add_docker_publish; else bw_add_package_deployment; fi
+  echo "==> Fertig! '$org/$repo' steht bereit (Branch: dev)."
 }
 
 # --- Schicht 2: Package-Deployment (NuGet-Release) --------------------------
@@ -184,6 +274,14 @@ bw_add_docker_publish() {
     echo "    vorhandenes Dockerfile beibehalten."
   fi
   [ -f ".dockerignore" ] || bw_install_template "dockerignore.base" ".dockerignore"
+
+  # Docker-Dateien in der Solution sichtbar machen (SolutionItems/docker), falls .slnx vorhanden.
+  local slnx
+  slnx="$(find . -maxdepth 1 -name '*.slnx' 2>/dev/null | head -n1 || true)"
+  if [ -n "$slnx" ]; then
+    bw_slnx_add_item "$slnx" "/SolutionItems/docker/" "Dockerfile"
+    bw_slnx_add_item "$slnx" "/SolutionItems/docker/" ".dockerignore"
+  fi
 
   bw_commit_push "chore: add docker publish workflow"
   echo "==> Docker-Publish-Workflow aktiv (Image -> GHCR)."

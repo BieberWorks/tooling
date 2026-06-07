@@ -2,6 +2,12 @@
 # Geteilte Bausteine fuer das Setup neuer BieberWorks-SDK-Repos.
 # Die duennen Scripts unter powershell/github/ importieren nur dieses Modul.
 # Statische Datei-Inhalte leben als Single-Source unter ../../../templates/.
+#
+# Schicht-Architektur:
+#   New-BwRepoBase     -> Basis-Geruest (Files + CI + Branches main/staging/dev + Default dev)
+#   New-BwRepo         -> Base + leere src/tests/docs + .slnx  (blanko-Repo)
+#   New-BwTemplateRepo -> Base + dotnet new <Template> + .slnx + Deploy (api/app/web/module)
+#   Add-BwPackageDeployment / Add-BwDockerPublish -> Deployment-Workflows (standalone nutzbar)
 
 $ErrorActionPreference = 'Stop'
 
@@ -48,7 +54,59 @@ function Invoke-BwCommitPush {
     git push origin $branch
 }
 
-# --- Schicht 1: Basis-Repo --------------------------------------------------
+# Fuegt eine Datei als <File>-Eintrag in einen Solution-Folder einer .slnx ein.
+# Legt den Folder an, falls er fehlt. Idempotent (kein Doppel-Eintrag). Nur falls .slnx existiert.
+function Add-BwSlnxItem {
+    param(
+        [Parameter(Mandatory)][string]$SlnxPath,
+        [Parameter(Mandatory)][string]$Folder,   # z.B. "/SolutionItems/docker/"
+        [Parameter(Mandatory)][string]$FilePath  # z.B. "Dockerfile"
+    )
+    if (-not (Test-Path $SlnxPath)) { return }
+    $xml = New-Object System.Xml.XmlDocument
+    $xml.PreserveWhitespace = $false
+    $xml.Load((Join-Path (Get-Location) $SlnxPath))
+    $root = $xml.DocumentElement   # <Solution>
+
+    # Folder finden oder anlegen
+    $folderNode = $null
+    foreach ($f in $root.SelectNodes('Folder')) {
+        if ($f.GetAttribute('Name') -eq $Folder) { $folderNode = $f; break }
+    }
+    if (-not $folderNode) {
+        $folderNode = $xml.CreateElement('Folder')
+        $folderNode.SetAttribute('Name', $Folder) | Out-Null
+        $root.AppendChild($folderNode) | Out-Null
+    }
+
+    # Doppel-Eintrag vermeiden
+    foreach ($fileEl in $folderNode.SelectNodes('File')) {
+        if ($fileEl.GetAttribute('Path') -eq $FilePath) { return }
+    }
+    $fileNode = $xml.CreateElement('File')
+    $fileNode.SetAttribute('Path', $FilePath) | Out-Null
+    $folderNode.AppendChild($fileNode) | Out-Null
+
+    $settings = New-Object System.Xml.XmlWriterSettings
+    $settings.Indent = $true
+    $settings.IndentChars = '  '
+    $settings.OmitXmlDeclaration = $true
+    $settings.Encoding = (New-Object System.Text.UTF8Encoding $false)
+    $writer = [System.Xml.XmlWriter]::Create((Join-Path (Get-Location) $SlnxPath), $settings)
+    try { $xml.Save($writer) } finally { $writer.Dispose() }
+}
+
+function Write-BwPackagesTokenHint {
+    param([string]$Org, [string]$RepoName)
+    Write-Host ''
+    Write-Host "==> WICHTIG: Repo-Secret 'PACKAGES_TOKEN' setzen, sobald dieses Repo interne Pakete nutzt." -ForegroundColor Yellow
+    Write-Host "    GITHUB_TOKEN kann keine Pakete aus anderen Org-Repos lesen (403); im Free-Tier sind"
+    Write-Host "    Org-Secrets fuer PRIVATE Repos nicht verfuegbar -> PAT (read:packages) pro Repo setzen:"
+    Write-Host "      gh secret set PACKAGES_TOKEN --repo $Org/$RepoName" -ForegroundColor Cyan
+    Write-Host ''
+}
+
+# --- Schicht 0: Basis-Repo (Files + CI + Branches, KEINE src/tests/docs) ----
 
 function New-BwRepoBase {
     [CmdletBinding()]
@@ -69,18 +127,15 @@ function New-BwRepoBase {
     Set-Location -Path $RepoName
     git init -b main
 
-    # 2. Ordnerstruktur (jedes Repo ist baubar/testbar)
-    Write-Host "==> Erstelle Ordnerstruktur..." -ForegroundColor Cyan
-    foreach ($folder in @('.github/workflows', 'src', 'tests', 'docs')) {
-        New-Item -ItemType Directory -Force -Path $folder | Out-Null
-        if ($folder -ne '.github/workflows') {
-            New-Item -ItemType File -Force -Path "$folder/.gitkeep" | Out-Null
-        }
-    }
+    # 2. Nur der Workflows-Ordner (src/tests/docs kommen erst in New-BwRepo / -TemplateRepo)
+    New-Item -ItemType Directory -Force -Path '.github/workflows' | Out-Null
 
-    # 3. LICENSE (proprietaer)
-    Write-Host "==> Lege LICENSE, README, nuget.config, Directory.Build.props an..." -ForegroundColor Cyan
-    Write-Utf8NoBom -Path 'LICENSE' -Content (Expand-BwTemplate 'LICENSE.tmpl' $tokens)
+    # 3. LICENSE, README, nuget.config, Directory.Build.props
+    Write-Host "==> Lege LICENSE, README, nuget.config, Directory.Build.props, CI an..." -ForegroundColor Cyan
+    Write-Utf8NoBom -Path 'LICENSE'               -Content (Expand-BwTemplate 'LICENSE.tmpl' $tokens)
+    Write-Utf8NoBom -Path 'README.md'             -Content (Expand-BwTemplate 'README.module.tmpl' $tokens)
+    Write-Utf8NoBom -Path 'nuget.config'          -Content (Expand-BwTemplate 'nuget.config')
+    Write-Utf8NoBom -Path 'Directory.Build.props' -Content (Expand-BwTemplate 'Directory.Build.props.tmpl' $tokens)
 
     # 4. .gitignore - VisualStudio-Basis (offiziell) + BieberWorks-Anhang
     $gitignore = $null
@@ -93,31 +148,25 @@ function New-BwRepoBase {
     }
     Write-Utf8NoBom -Path '.gitignore' -Content ($gitignore + (Expand-BwTemplate 'gitignore.append'))
 
-    # 5. README, nuget.config, Directory.Build.props (+ tests/)
-    Write-Utf8NoBom -Path 'README.md'             -Content (Expand-BwTemplate 'README.module.tmpl' $tokens)
-    Write-Utf8NoBom -Path 'nuget.config'          -Content (Expand-BwTemplate 'nuget.config')
-    Write-Utf8NoBom -Path 'Directory.Build.props' -Content (Expand-BwTemplate 'Directory.Build.props.tmpl' $tokens)
-    Write-Utf8NoBom -Path 'tests/Directory.Build.props' -Content (Expand-BwTemplate 'tests.Directory.Build.props')
-
-    # 6. CI (build/test) - Caller auf den reusable Workflow
+    # 5. CI (build/test) - Caller auf den reusable Workflow (run_tests default true)
     Write-Utf8NoBom -Path '.github/workflows/ci.yml' -Content (Expand-BwTemplate 'workflows/ci.caller.yml')
 
-    # 7. Initialer Commit + Remote-Repo + Push (pusht main)
+    # 6. Initialer Commit + Remote-Repo + Push (pusht main)
     git add .
     git commit -m 'chore: initial repo scaffold (base, ci)'
     Write-Host "==> Erstelle Remote-Repo $Org/$RepoName..." -ForegroundColor Cyan
     gh repo create "$Org/$RepoName" $visibility --source=. --remote=origin --push
 
-    # 8. Branches: immer main + staging + dev
+    # 7. Branches: immer main + staging + dev
     Write-Host "==> Erstelle Branches (staging, dev)..." -ForegroundColor Cyan
     git checkout -b staging; git push -u origin staging
     git checkout -b dev;     git push -u origin dev
     git checkout dev
 
-    # 9. Default-Branch = dev
+    # 8. Default-Branch = dev
     gh repo edit "$Org/$RepoName" --default-branch dev
 
-    # 10. Branch Protection - nur bei PUBLIC (Free-Plan kann es fuer private nicht)
+    # 9. Branch Protection - nur bei PUBLIC (Free-Plan kann es fuer private nicht)
     if ($Public) {
         Write-Host "==> Konfiguriere Branch Protection..." -ForegroundColor Cyan
         $protection = @{
@@ -143,18 +192,67 @@ function New-BwRepoBase {
     }
 
     Write-BwPackagesTokenHint -Org $Org -RepoName $RepoName
-    Write-Host "==> Fertig! '$Org/$RepoName' steht bereit (Branch: dev)." -ForegroundColor Green
-    Write-Host "    Naechster Schritt: add-package-deployment.ps1 und/oder add-docker-publish.ps1 im Repo-Ordner." -ForegroundColor DarkGray
+    Write-Host "==> Basis steht (Branch: dev)." -ForegroundColor Green
 }
 
-function Write-BwPackagesTokenHint {
-    param([string]$Org, [string]$RepoName)
-    Write-Host ''
-    Write-Host "==> WICHTIG: Repo-Secret 'PACKAGES_TOKEN' setzen, sobald dieses Repo interne Pakete nutzt." -ForegroundColor Yellow
-    Write-Host "    GITHUB_TOKEN kann keine Pakete aus anderen Org-Repos lesen (403); im Free-Tier sind"
-    Write-Host "    Org-Secrets fuer PRIVATE Repos nicht verfuegbar -> PAT (read:packages) pro Repo setzen:"
-    Write-Host "      gh secret set PACKAGES_TOKEN --repo $Org/$RepoName" -ForegroundColor Cyan
-    Write-Host ''
+# --- Schicht 1a: Blanko-Repo (Base + leere Ordner + .slnx) ------------------
+
+function New-BwRepo {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)][string]$RepoName,
+        [string]$Org = 'BieberWorks',
+        [switch]$Public
+    )
+    New-BwRepoBase -RepoName $RepoName -Org $Org -Public:$Public
+
+    Write-Host "==> Lege leere Standard-Ordner (src/tests/docs) + Solution an..." -ForegroundColor Cyan
+    foreach ($folder in @('src', 'tests', 'docs')) {
+        New-Item -ItemType Directory -Force -Path $folder | Out-Null
+        New-Item -ItemType File -Force -Path "$folder/.gitkeep" | Out-Null
+    }
+    Write-Utf8NoBom -Path 'tests/Directory.Build.props' -Content (Expand-BwTemplate 'tests.Directory.Build.props')
+    Write-Utf8NoBom -Path "$RepoName.slnx"               -Content (Expand-BwTemplate 'solution.slnx.tmpl')
+
+    Invoke-BwCommitPush -Message 'chore: add solution skeleton (src/tests/docs, slnx)'
+    Write-Host "==> Fertig! '$Org/$RepoName' steht bereit (Branch: dev)." -ForegroundColor Green
+}
+
+# --- Schicht 1b: Typ-Repo via dotnet-new-Template + Deployment ---------------
+
+function New-BwTemplateRepo {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)][string]$RepoName,
+        [Parameter(Mandatory)][string]$Template,                       # dotnet new shortName
+        [Parameter(Mandatory)][ValidateSet('docker', 'packages')][string]$Deploy,
+        [string]$Org = 'BieberWorks',
+        [switch]$Public
+    )
+    New-BwRepoBase -RepoName $RepoName -Org $Org -Public:$Public
+
+    Write-Host "==> Solution-Geruest + 'dotnet new $Template'..." -ForegroundColor Cyan
+    New-Item -ItemType Directory -Force -Path 'docs' | Out-Null
+    New-Item -ItemType File -Force -Path 'docs/.gitkeep' | Out-Null
+    Write-Utf8NoBom -Path "$RepoName.slnx" -Content (Expand-BwTemplate 'solution.slnx.tmpl')
+
+    # Template instanziieren in den Repo-Root. Das Template bringt seine Projekte
+    # unter src/<Name> (+ tests/<Name>.Tests) mit; KEINE repo-globalen Dateien
+    # (die liefert die Basis) und KEINE eigene .slnx.
+    dotnet new $Template -n $RepoName -o .
+
+    # Alle erzeugten csproj in die Solution aufnehmen (src/ und tests/ getrennt).
+    Get-ChildItem -Path 'src'   -Recurse -Filter *.csproj -ErrorAction SilentlyContinue | ForEach-Object {
+        dotnet sln "$RepoName.slnx" add $_.FullName --solution-folder src
+    }
+    Get-ChildItem -Path 'tests' -Recurse -Filter *.csproj -ErrorAction SilentlyContinue | ForEach-Object {
+        dotnet sln "$RepoName.slnx" add $_.FullName --solution-folder tests
+    }
+
+    Invoke-BwCommitPush -Message "chore: scaffold $Template project + solution"
+
+    if ($Deploy -eq 'docker') { Add-BwDockerPublish } else { Add-BwPackageDeployment }
+    Write-Host "==> Fertig! '$Org/$RepoName' steht bereit (Branch: dev)." -ForegroundColor Green
 }
 
 # --- Schicht 2: Package-Deployment (NuGet-Release) --------------------------
@@ -202,8 +300,18 @@ function Add-BwDockerPublish {
         Write-Utf8NoBom -Path '.dockerignore' -Content (Expand-BwTemplate 'dockerignore.base')
     }
 
+    # Docker-Dateien in der Solution sichtbar machen (SolutionItems/docker), falls .slnx vorhanden.
+    $slnx = Get-ChildItem -Path . -Filter *.slnx -ErrorAction SilentlyContinue | Select-Object -First 1
+    if ($slnx) {
+        Add-BwSlnxItem -SlnxPath $slnx.Name -Folder '/SolutionItems/docker/' -FilePath 'Dockerfile'
+        Add-BwSlnxItem -SlnxPath $slnx.Name -Folder '/SolutionItems/docker/' -FilePath '.dockerignore'
+    }
+
     Invoke-BwCommitPush -Message 'chore: add docker publish workflow'
     Write-Host '==> Docker-Publish-Workflow aktiv (Image -> GHCR).' -ForegroundColor Green
 }
 
-Export-ModuleMember -Function New-BwRepoBase, Add-BwPackageDeployment, Add-BwDockerPublish, Get-BwGithubUser, Get-BwRepoIdentity
+Export-ModuleMember -Function `
+    New-BwRepoBase, New-BwRepo, New-BwTemplateRepo, `
+    Add-BwPackageDeployment, Add-BwDockerPublish, Add-BwSlnxItem, `
+    Get-BwGithubUser, Get-BwRepoIdentity
