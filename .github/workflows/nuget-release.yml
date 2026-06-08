@@ -48,6 +48,14 @@ jobs:
             --name bieberworks --username "${{ github.actor }}" \
             --password "${{ secrets.PACKAGES_TOKEN }}" --store-password-in-clear-text || true
 
+      # Release-Gate: Tests muessen gruen sein, BEVOR gepackt/gepusht wird.
+      # Faengt sporadisch fehlerhafte Builds ab (z.B. wenn Quelldateien aus der
+      # Kompilierung fallen) -> es wird nie ein kaputtes Paket veroeffentlicht.
+      # Gilt automatisch fuer staging (rc) UND main (final), da derselbe Workflow.
+      - name: Test (Release-Gate)
+        if: hashFiles('**/*.Tests.csproj') != '' && steps.tagger.outputs.new_version != ''
+        run: dotnet test -c Release
+
       - name: Pack
         if: hashFiles('**/*.csproj') != '' && steps.tagger.outputs.new_version != ''
         run: dotnet pack -c Release -p:Version=${{ steps.tagger.outputs.new_version }} -o ./artifacts
