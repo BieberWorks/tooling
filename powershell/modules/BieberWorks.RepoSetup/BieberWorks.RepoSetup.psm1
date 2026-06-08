@@ -239,9 +239,7 @@ function New-BwTemplateRepo {
     # Template instanziieren in den Repo-Root. Das Template bringt seine Projekte
     # unter src/<Name> (+ tests/<Name>.Tests) mit; KEINE repo-globalen Dateien
     # (die liefert die Basis) und KEINE eigene .slnx.
-    # "$Org.$RepoName" damit sourceName (BieberWorks.Module → BieberWorks.Forum) greift
-    # und Namespaces mit Directory.Build.props (RootNamespace=PackagePrefix.ProjectName) uebereinstimmen.
-    dotnet new $Template -n "$Org.$RepoName" -o .
+    dotnet new $Template -n $RepoName -o .
 
     # Alle erzeugten csproj in die Solution aufnehmen (src/ und tests/ getrennt).
     Get-ChildItem -Path 'src'   -Recurse -Filter *.csproj -ErrorAction SilentlyContinue | ForEach-Object {
