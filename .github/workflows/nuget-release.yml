@@ -53,7 +53,10 @@ jobs:
       # Kompilierung fallen) -> es wird nie ein kaputtes Paket veroeffentlicht.
       # Gilt automatisch fuer staging (rc) UND main (final), da derselbe Workflow.
       - name: Test (Release-Gate)
-        if: hashFiles('**/*.Tests.csproj') != '' && steps.tagger.outputs.new_version != ''
+        # Nur bei echter Solution im Repo-Root (Module/App-Hosts). Template-Paket-Repos
+        # (z.B. DotnetTemplates) haben keine .slnx -> Gate wird sauber uebersprungen;
+        # deren content/**-Testprojekte sind nur Paket-Inhalt, nicht baubar.
+        if: hashFiles('*.slnx', '*.sln') != '' && steps.tagger.outputs.new_version != ''
         run: dotnet test -c Release
 
       - name: Pack
