@@ -1,7 +1,7 @@
 name: Docker Publish
 on:
   push:
-    branches: [main, staging, dev]
+    branches: [main, staging]
 jobs:
   docker:
     permissions:        # nötig: Repo-Default ist read, reusable Workflows erben nur vom Caller
