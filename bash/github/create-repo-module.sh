@@ -23,4 +23,9 @@ if [ -z "$REPO_NAME" ]; then
   exit 1
 fi
 
+if [[ "$REPO_NAME" != SDK-* ]]; then
+  echo "HINWEIS: Fachmodul-Repos sollten nach Konvention 'SDK-<Name>' heissen (z.B. SDK-Auth, SDK-Email)."
+  echo "         Paketpraefix 'BieberWorks.SDK' wird unabhaengig vom Repo-Namen gesetzt."
+fi
+
 bw_new_template_repo "$REPO_NAME" "bieberworks-module" "packages" "$ORG" "$VIS"
