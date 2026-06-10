@@ -25,7 +25,11 @@ fi
 
 if [[ "$REPO_NAME" != SDK-* ]]; then
   echo "HINWEIS: Fachmodul-Repos sollten nach Konvention 'SDK-<Name>' heissen (z.B. SDK-Auth, SDK-Email)."
-  echo "         Paketpraefix 'BieberWorks.SDK' wird unabhaengig vom Repo-Namen gesetzt."
 fi
 
-bw_new_template_repo "$REPO_NAME" "bieberworks-module" "packages" "$ORG" "$VIS"
+# dotnet new braucht einen Punktnamen: BieberWorks.SDK.<Name> (SDK- Praefix entfernen).
+# Das Template extrahiert das letzte Punkt-Segment als Klassen-/Dateinamen (z.B. 'Forum').
+MODULE_NAME="${REPO_NAME#SDK-}"
+DOTNET_NAME="BieberWorks.SDK.${MODULE_NAME}"
+
+bw_new_template_repo "$REPO_NAME" "bieberworks-module" "packages" "$ORG" "$VIS" "$DOTNET_NAME"

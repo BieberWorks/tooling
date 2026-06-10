@@ -209,19 +209,22 @@ bw_new_repo() {
 
 # --- Schicht 1b: Typ-Repo via dotnet-new-Template + Deployment ---------------
 
-# bw_new_template_repo <RepoName> <Template-ShortName> <docker|packages> [Org] [public|private]
+# bw_new_template_repo <RepoName> <Template-ShortName> <docker|packages> [Org] [public|private] [DotnetName]
+# DotnetName: optionaler -n-Wert fuer dotnet new (Standard = RepoName).
+# Fuer Module: BieberWorks.SDK.<Name>, damit das Template den korrekten Kurznamen extrahiert.
 bw_new_template_repo() {
-  local repo="$1" template="$2" deploy="$3" org="${4:-BieberWorks}" vis="${5:-private}"
+  local repo="$1" template="$2" deploy="$3" org="${4:-BieberWorks}" vis="${5:-private}" dotnet_name="${6:-}"
+  local name_arg="${dotnet_name:-$repo}"
   bw_new_repo_base "$repo" "$org" "$vis"
 
-  echo "==> Solution-Geruest + 'dotnet new $template'..."
+  echo "==> Solution-Geruest + 'dotnet new $template -n $name_arg'..."
   mkdir -p docs; touch docs/.gitkeep
   bw_install_template "solution.slnx.tmpl" "$repo.slnx"
 
   # Template instanziieren in den Repo-Root. Das Template bringt seine Projekte
   # unter src/<Name> (+ tests/<Name>.Tests) mit; KEINE repo-globalen Dateien
   # (die liefert die Basis) und KEINE eigene .slnx.
-  dotnet new "$template" -n "$repo" -o .
+  dotnet new "$template" -n "$name_arg" -o .
 
   # Alle erzeugten csproj in die Solution aufnehmen (src/ und tests/ getrennt).
   local csproj

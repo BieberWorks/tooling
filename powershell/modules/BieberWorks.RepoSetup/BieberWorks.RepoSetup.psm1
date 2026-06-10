@@ -226,12 +226,14 @@ function New-BwTemplateRepo {
         [Parameter(Mandatory)][string]$RepoName,
         [Parameter(Mandatory)][string]$Template,                       # dotnet new shortName
         [Parameter(Mandatory)][ValidateSet('docker', 'packages')][string]$Deploy,
+        [string]$DotnetName = '',   # -n Argument fuer dotnet new; Standard = $RepoName
         [string]$Org = 'BieberWorks',
         [switch]$Public
     )
     New-BwRepoBase -RepoName $RepoName -Org $Org -Public:$Public
 
-    Write-Host "==> Solution-Geruest + 'dotnet new $Template'..." -ForegroundColor Cyan
+    $nameArg = if ($DotnetName) { $DotnetName } else { $RepoName }
+    Write-Host "==> Solution-Geruest + 'dotnet new $Template -n $nameArg'..." -ForegroundColor Cyan
     New-Item -ItemType Directory -Force -Path 'docs' | Out-Null
     New-Item -ItemType File -Force -Path 'docs/.gitkeep' | Out-Null
     Write-Utf8NoBom -Path "$RepoName.slnx" -Content (Expand-BwTemplate 'solution.slnx.tmpl')
@@ -239,7 +241,7 @@ function New-BwTemplateRepo {
     # Template instanziieren in den Repo-Root. Das Template bringt seine Projekte
     # unter src/<Name> (+ tests/<Name>.Tests) mit; KEINE repo-globalen Dateien
     # (die liefert die Basis) und KEINE eigene .slnx.
-    dotnet new $Template -n $RepoName -o .
+    dotnet new $Template -n $nameArg -o .
 
     # Alle erzeugten csproj in die Solution aufnehmen (src/ und tests/ getrennt).
     Get-ChildItem -Path 'src'   -Recurse -Filter *.csproj -ErrorAction SilentlyContinue | ForEach-Object {

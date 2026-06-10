@@ -12,8 +12,12 @@ $ErrorActionPreference = 'Stop'
 
 if ($RepoName -notmatch '^SDK-') {
     Write-Host "HINWEIS: Fachmodul-Repos sollten nach Konvention 'SDK-<Name>' heissen (z.B. SDK-Auth, SDK-Email)." -ForegroundColor Yellow
-    Write-Host "         Paketpraefix 'BieberWorks.SDK' wird unabhaengig vom Repo-Namen gesetzt." -ForegroundColor Yellow
 }
 
+# dotnet new braucht einen Punktnamen: BieberWorks.SDK.<Name> (SDK- Praefix entfernen).
+# Das Template extrahiert das letzte Punkt-Segment als Klassen-/Dateinamen (z.B. 'Forum').
+$ModuleName  = $RepoName -replace '^SDK-', ''
+$DotnetName  = "BieberWorks.SDK.$ModuleName"
+
 Import-Module (Join-Path $PSScriptRoot '..\modules\BieberWorks.RepoSetup\BieberWorks.RepoSetup.psd1') -Force
-New-BwTemplateRepo -RepoName $RepoName -Template 'bieberworks-module' -Deploy 'packages' -Org $Org -Public:$Public
+New-BwTemplateRepo -RepoName $RepoName -DotnetName $DotnetName -Template 'bieberworks-module' -Deploy 'packages' -Org $Org -Public:$Public
