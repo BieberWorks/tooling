@@ -24,14 +24,18 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Automated Tagging (SemVer)
-        id: tagger
+      # SemVer-Version aus Conventional Commits BERECHNEN, aber noch NICHT taggen
+      # (dry_run). So kann der Test-Gate VOR dem Tag laufen — schlaegt der Test fehl,
+      # entsteht kein verwaister -rc/final-Tag, der vor einem Rerun geloescht werden muesste.
+      - name: Compute version (SemVer, dry-run)
+        id: version
         uses: mathieudutour/github-tag-action@v6.2
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
           release_branches: main
           pre_release_branches: staging
           append_to_pre_release_tag: rc
+          dry_run: true
 
       - name: Setup .NET
         if: hashFiles('**/*.csproj') != ''
@@ -48,16 +52,28 @@ jobs:
             --name bieberworks --username "${{ github.actor }}" \
             --password "${{ secrets.PACKAGES_TOKEN }}" --store-password-in-clear-text || true
 
-      # Release-Gate: Tests muessen gruen sein, BEVOR gepackt/gepusht wird.
+      # Release-Gate: Tests muessen gruen sein, BEVOR getaggt/gepackt/gepusht wird.
       # Faengt sporadisch fehlerhafte Builds ab (z.B. wenn Quelldateien aus der
-      # Kompilierung fallen) -> es wird nie ein kaputtes Paket veroeffentlicht.
-      # Gilt automatisch fuer staging (rc) UND main (final), da derselbe Workflow.
+      # Kompilierung fallen) -> es wird nie ein kaputtes Paket veroeffentlicht UND
+      # kein verwaister Tag erzeugt. Laeuft nur, wenn ein Release ansteht (new_version).
       - name: Test (Release-Gate)
         # Nur bei echter Solution im Repo-Root (Module/App-Hosts). Template-Paket-Repos
         # (z.B. DotnetTemplates) haben keine .slnx -> Gate wird sauber uebersprungen;
         # deren content/**-Testprojekte sind nur Paket-Inhalt, nicht baubar.
-        if: hashFiles('*.slnx', '*.sln') != '' && steps.tagger.outputs.new_version != ''
+        if: hashFiles('*.slnx', '*.sln') != '' && steps.version.outputs.new_version != ''
         run: dotnet test -c Release
+
+      # Echten Tag JETZT erst erzeugen+pushen — nach grunem Test-Gate.
+      # Idempotent zur dry-run-Berechnung oben (gleiche Commits => gleiche Version).
+      - name: Create tag (SemVer)
+        id: tagger
+        if: steps.version.outputs.new_version != ''
+        uses: mathieudutour/github-tag-action@v6.2
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          release_branches: main
+          pre_release_branches: staging
+          append_to_pre_release_tag: rc
 
       - name: Pack
         if: hashFiles('**/*.csproj') != '' && steps.tagger.outputs.new_version != ''
