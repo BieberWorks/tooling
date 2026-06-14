@@ -11,7 +11,9 @@ param(
 $ErrorActionPreference = 'Stop'
 
 if ($RepoName -notmatch '^SDK-') {
-    Write-Host "HINWEIS: Fachmodul-Repos sollten nach Konvention 'SDK-<Name>' heissen (z.B. SDK-Auth, SDK-Email)." -ForegroundColor Yellow
+    $suggested = "SDK-$RepoName"
+    Write-Error "Fachmodul-Repos muessen nach Konvention 'SDK-<Name>' heissen. Bitte '-RepoName $suggested' verwenden."
+    exit 1
 }
 
 # dotnet new braucht einen Punktnamen: BieberWorks.SDK.<Name> (SDK- Praefix entfernen).
