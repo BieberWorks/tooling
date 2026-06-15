@@ -75,6 +75,14 @@ jobs:
           pre_release_branches: staging
           append_to_pre_release_tag: rc
 
+      - name: Pin floating deps to stable (main only)
+        if: github.ref == 'refs/heads/main'
+        shell: pwsh
+        run: |
+          Get-ChildItem -Recurse -Filter "*.csproj" | ForEach-Object {
+            (Get-Content $_.FullName) -replace '(\.\*)-\*', '$1' | Set-Content $_.FullName
+          }
+
       - name: Pack
         if: hashFiles('**/*.csproj') != '' && steps.tagger.outputs.new_version != ''
         run: dotnet pack -c Release -p:Version=${{ steps.tagger.outputs.new_version }} -o ./artifacts
