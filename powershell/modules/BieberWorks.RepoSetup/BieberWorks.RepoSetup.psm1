@@ -264,7 +264,12 @@ function Add-BwPackageDeployment {
     param()
 
     Write-Host '==> Fuege NuGet-Release-Workflow hinzu...' -ForegroundColor Cyan
-    Write-Utf8NoBom -Path '.github/workflows/release.yml' -Content (Expand-BwTemplate 'workflows/nuget-release.caller.yml')
+    $id = Get-BwRepoIdentity
+    # __MODULE__ = Repo-Name ohne 'SDK-' Praefix (lowercase), __REPO__ = voller Repo-Name
+    $moduleName = $id.Repo -replace '^SDK-', '' -replace '-', '_'
+    $moduleName = $moduleName.Substring(0,1).ToLower() + $moduleName.Substring(1)
+    $tokens = @{ MODULE = $moduleName; REPO = $id.Repo }
+    Write-Utf8NoBom -Path '.github/workflows/release.yml' -Content (Expand-BwTemplate 'workflows/nuget-release.caller.yml' $tokens)
 
     # Directory.Build.props nur ergaenzen, falls sie fehlt (Basis bringt sie normalerweise schon).
     if (-not (Test-Path 'Directory.Build.props')) {

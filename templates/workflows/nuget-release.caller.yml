@@ -9,3 +9,21 @@ jobs:
       packages: write
     uses: BieberWorks/tooling/.github/workflows/nuget-release.yml@v1
     secrets: inherit
+
+  notify-docs:
+    needs: release
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main'
+    steps:
+      - name: Dispatch docs update
+        uses: peter-evans/repository-dispatch@v3
+        with:
+          token: ${{ secrets.DISPATCH_TOKEN }}
+          repository: BieberWorks/SDK-Docs
+          event-type: docs-update
+          client-payload: |
+            {
+              "module": "__MODULE__",
+              "version": "${{ needs.release.outputs.new_version }}",
+              "repo": "__REPO__"
+            }
