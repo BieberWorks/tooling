@@ -23,25 +23,20 @@ jobs:
         run: echo "version=${GITHUB_REF_NAME#ps-v}" >> $GITHUB_OUTPUT
 
       - name: Update module version
-        run: |
-          sed -i "s/ModuleVersion = '[^']*'/ModuleVersion = '${{ steps.version.outputs.version }}'/" \
-            powershell/modules/BieberWorks.RepoSetup/BieberWorks.RepoSetup.psd1
-
-      - name: Register GitHub Packages as PS repository
         shell: pwsh
         run: |
-          $cred = New-Object PSCredential("BieberWorks", (ConvertTo-SecureString "${{ secrets.GITHUB_TOKEN }}" -AsPlainText -Force))
-          Register-PSRepository -Name BieberWorks `
-            -SourceLocation "https://nuget.pkg.github.com/BieberWorks/index.json" `
-            -PublishLocation "https://nuget.pkg.github.com/BieberWorks/" `
-            -InstallationPolicy Trusted `
-            -Credential $cred
+          $path = "powershell/modules/BieberWorks.RepoSetup/BieberWorks.RepoSetup.psd1"
+          $content = Get-Content $path -Raw
+          $content = $content -replace "ModuleVersion\s*=\s*'[^']*'", "ModuleVersion     = '${{ steps.version.outputs.version }}'"
+          Set-Content $path $content -NoNewline
 
       - name: Publish module
         shell: pwsh
         run: |
           $cred = New-Object PSCredential("BieberWorks", (ConvertTo-SecureString "${{ secrets.GITHUB_TOKEN }}" -AsPlainText -Force))
-          Publish-Module -Path "powershell/modules/BieberWorks.RepoSetup" `
+          Register-PSResourceRepository -Name BieberWorks `
+            -Uri "https://nuget.pkg.github.com/BieberWorks/index.json" `
+            -Trusted -Credential $cred
+          Publish-PSResource -Path "powershell/modules/BieberWorks.RepoSetup" `
             -Repository BieberWorks `
-            -Credential $cred `
-            -NuGetApiKey "${{ secrets.GITHUB_TOKEN }}"
+            -ApiKey "${{ secrets.GITHUB_TOKEN }}"
