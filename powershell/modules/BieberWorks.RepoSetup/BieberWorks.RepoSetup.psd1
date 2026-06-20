@@ -13,7 +13,7 @@
     CompanyName       = 'BieberWorks'
     Copyright         = '(c) 2026 BieberWorks. Alle Rechte vorbehalten.'
     Description       = 'BieberWorks SDK Repo-Setup Tools — New-BwAppRepo, New-BwModuleRepo, New-BwApiRepo, New-BwWasmApiRepo, New-BwWasmRepo, New-BwBlankRepo und Hilfsfunktionen.'
-    PowerShellVersion = '7.2'
+    PowerShellVersion = '5.1'
 
     FunctionsToExport = @(
         'New-BwModuleRepo',
