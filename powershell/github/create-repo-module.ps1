@@ -6,6 +6,7 @@
 param(
     [Parameter(Mandatory)][string]$RepoName,
     [string]$Org = 'BieberWorks',
+    [string]$TargetDirectory = '',
     [switch]$Public
 )
 $ErrorActionPreference = 'Stop'
@@ -22,4 +23,4 @@ $ModuleName  = $RepoName -replace '^SDK-', ''
 $DotnetName  = "BieberWorks.SDK.$ModuleName"
 
 Import-Module (Join-Path $PSScriptRoot '..\modules\BieberWorks.RepoSetup\BieberWorks.RepoSetup.psd1') -Force
-New-BwTemplateRepo -RepoName $RepoName -DotnetName $DotnetName -Template 'bieberworks-module' -Deploy 'packages' -Org $Org -Public:$Public
+New-BwTemplateRepo -RepoName $RepoName -DotnetName $DotnetName -Template 'bieberworks-module' -Deploy 'packages' -Org $Org -TargetDirectory $TargetDirectory -Public:$Public

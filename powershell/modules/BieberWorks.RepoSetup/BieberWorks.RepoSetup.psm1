@@ -113,6 +113,10 @@ function New-BwRepoBase {
     param(
         [Parameter(Mandatory)][string]$RepoName,
         [string]$Org = 'BieberWorks',
+        # 'Directory.Build.props.tmpl'          = SDK-Modul (Default)
+        # 'Directory.Build.consumer.props.tmpl' = Consumer-App (kein PackagePrefix)
+        [string]$DbPropsTemplate = 'Directory.Build.props.tmpl',
+        [string]$TargetDirectory = '',
         [switch]$Public
     )
 
@@ -123,19 +127,24 @@ function New-BwRepoBase {
     Write-Host "==> Basis-Repo: $Org/$RepoName  (Owner-Account: $githubUser, $visibility)" -ForegroundColor Cyan
 
     # 1. Lokaler Ordner + Git
-    New-Item -ItemType Directory -Force -Path $RepoName | Out-Null
-    Set-Location -Path $RepoName
+    $repoDir = if ($TargetDirectory) {
+        Join-Path (Resolve-Path $TargetDirectory) $RepoName
+    } else {
+        Join-Path (Get-Location) $RepoName
+    }
+    New-Item -ItemType Directory -Force -Path $repoDir | Out-Null
+    Set-Location -Path $repoDir
     git init -b main
 
     # 2. Nur der Workflows-Ordner (src/tests/docs kommen erst in New-BwRepo / -TemplateRepo)
     New-Item -ItemType Directory -Force -Path '.github/workflows' | Out-Null
 
     # 3. LICENSE, README, nuget.config, Directory.Build.props
-    Write-Host "==> Lege LICENSE, README, nuget.config, Directory.Build.props, CI an..." -ForegroundColor Cyan
+    Write-Host "==> Lege LICENSE, README, nuget.config, Directory.Build.props ($DbPropsTemplate), CI an..." -ForegroundColor Cyan
     Write-Utf8NoBom -Path 'LICENSE'               -Content (Expand-BwTemplate 'LICENSE.tmpl' $tokens)
     Write-Utf8NoBom -Path 'README.md'             -Content (Expand-BwTemplate 'README.module.tmpl' $tokens)
     Write-Utf8NoBom -Path 'nuget.config'          -Content (Expand-BwTemplate 'nuget.config')
-    Write-Utf8NoBom -Path 'Directory.Build.props' -Content (Expand-BwTemplate 'Directory.Build.props.tmpl' $tokens)
+    Write-Utf8NoBom -Path 'Directory.Build.props' -Content (Expand-BwTemplate $DbPropsTemplate $tokens)
 
     # 4. .gitignore - VisualStudio-Basis (offiziell) + BieberWorks-Anhang
     $gitignore = $null
@@ -202,9 +211,10 @@ function New-BwRepo {
     param(
         [Parameter(Mandatory)][string]$RepoName,
         [string]$Org = 'BieberWorks',
+        [string]$TargetDirectory = '',
         [switch]$Public
     )
-    New-BwRepoBase -RepoName $RepoName -Org $Org -Public:$Public
+    New-BwRepoBase -RepoName $RepoName -Org $Org -TargetDirectory $TargetDirectory -Public:$Public
 
     Write-Host "==> Lege leere Standard-Ordner (src/tests/docs) + Solution an..." -ForegroundColor Cyan
     foreach ($folder in @('src', 'tests', 'docs')) {
@@ -228,9 +238,14 @@ function New-BwTemplateRepo {
         [Parameter(Mandatory)][ValidateSet('docker', 'packages')][string]$Deploy,
         [string]$DotnetName = '',   # -n Argument fuer dotnet new; Standard = $RepoName
         [string]$Org = 'BieberWorks',
+        # Welches Directory.Build.props-Template verwenden?
+        # 'Directory.Build.props.tmpl'          = SDK-Modul (PackagePrefix + NuGet-Publishing, Default)
+        # 'Directory.Build.consumer.props.tmpl' = Consumer-App (kein PackagePrefix, kein NuGet-Publishing)
+        [string]$DbPropsTemplate = 'Directory.Build.props.tmpl',
+        [string]$TargetDirectory = '',
         [switch]$Public
     )
-    New-BwRepoBase -RepoName $RepoName -Org $Org -Public:$Public
+    New-BwRepoBase -RepoName $RepoName -Org $Org -DbPropsTemplate $DbPropsTemplate -TargetDirectory $TargetDirectory -Public:$Public
 
     $nameArg = if ($DotnetName) { $DotnetName } else { $RepoName }
     Write-Host "==> Solution-Geruest + 'dotnet new $Template -n $nameArg'..." -ForegroundColor Cyan

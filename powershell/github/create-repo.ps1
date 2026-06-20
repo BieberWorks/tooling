@@ -7,8 +7,9 @@
 param(
     [Parameter(Mandatory)][string]$RepoName,
     [string]$Org = 'BieberWorks',
+    [string]$TargetDirectory = '',
     [switch]$Public
 )
 $ErrorActionPreference = 'Stop'
 Import-Module (Join-Path $PSScriptRoot '..\modules\BieberWorks.RepoSetup\BieberWorks.RepoSetup.psd1') -Force
-New-BwRepo -RepoName $RepoName -Org $Org -Public:$Public
+New-BwRepo -RepoName $RepoName -Org $Org -TargetDirectory $TargetDirectory -Public:$Public

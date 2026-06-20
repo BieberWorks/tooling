@@ -1,12 +1,13 @@
-# Legt ein neues BieberWorks-Web-Repo an: Basis + 'dotnet new bieberworks-web' + Docker-Publish.
-# HINWEIS: Das Template 'bieberworks-web' muss im DotnetTemplates-Paket existieren.
+# Alias auf create-repo-app.ps1.
+# Hintergrund: bieberworks-web war ein Phantom-Template (existierte nie).
+# Consumer-Blazor-Apps werden mit 'bw-blazor' via create-repo-app.ps1 angelegt.
 #
 #   .\create-repo-web.ps1 -RepoName <Name> [-Public]
 param(
     [Parameter(Mandatory)][string]$RepoName,
     [string]$Org = 'BieberWorks',
+    [string]$TargetDirectory = '',
     [switch]$Public
 )
 $ErrorActionPreference = 'Stop'
-Import-Module (Join-Path $PSScriptRoot '..\modules\BieberWorks.RepoSetup\BieberWorks.RepoSetup.psd1') -Force
-New-BwTemplateRepo -RepoName $RepoName -Template 'bieberworks-web' -Deploy 'docker' -Org $Org -Public:$Public
+& (Join-Path $PSScriptRoot 'create-repo-app.ps1') -RepoName $RepoName -Org $Org -TargetDirectory $TargetDirectory -Public:$Public
