@@ -7,7 +7,7 @@
 #   .\create-repo-api.ps1 -RepoName <Name> [-Public]
 param(
     [Parameter(Mandatory)][string]$RepoName,
-    [string]$Org = 'BieberWorks',
+    [Parameter(Mandatory)][string]$Org,
     [string]$TargetDirectory = '',
     [switch]$Public
 )
