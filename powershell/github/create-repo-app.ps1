@@ -4,7 +4,7 @@
 #   .\create-repo-app.ps1 -RepoName <Name> [-Public]
 param(
     [Parameter(Mandatory)][string]$RepoName,
-    [Parameter(Mandatory)][string]$Org,
+    [Parameter(Mandatory)][string]$Owner,
     [string]$TargetDirectory = '',
     [switch]$Public
 )
@@ -15,6 +15,6 @@ New-BwTemplateRepo `
     -Template 'bw-blazor' `
     -Deploy 'docker' `
     -DbPropsTemplate 'Directory.Build.consumer.props.tmpl' `
-    -Org $Org `
+    -Owner $Owner `
     -TargetDirectory $TargetDirectory `
     -Public:$Public

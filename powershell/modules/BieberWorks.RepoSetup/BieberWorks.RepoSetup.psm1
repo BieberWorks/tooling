@@ -97,12 +97,12 @@ function Add-BwSlnxItem {
 }
 
 function Write-BwPackagesTokenHint {
-    param([string]$Org, [string]$RepoName)
+    param([string]$Owner, [string]$RepoName)
     Write-Host ''
     Write-Host "==> WICHTIG: Repo-Secret 'PACKAGES_TOKEN' setzen, sobald dieses Repo interne Pakete nutzt." -ForegroundColor Yellow
     Write-Host "    GITHUB_TOKEN kann keine Pakete aus anderen Org-Repos lesen (403); im Free-Tier sind"
     Write-Host "    Org-Secrets fuer PRIVATE Repos nicht verfuegbar -> PAT (read:packages) pro Repo setzen:"
-    Write-Host "      gh secret set PACKAGES_TOKEN --repo $Org/$RepoName" -ForegroundColor Cyan
+    Write-Host "      gh secret set PACKAGES_TOKEN --repo $Owner/$RepoName" -ForegroundColor Cyan
     Write-Host ''
 }
 
@@ -112,7 +112,7 @@ function New-BwRepoBase {
     [CmdletBinding()]
     param(
         [Parameter(Mandatory)][string]$RepoName,
-        [string]$Org = 'BieberWorks',
+        [string]$Owner = 'BieberWorks',
         # 'Directory.Build.props.tmpl'          = SDK-Modul (Default)
         # 'Directory.Build.consumer.props.tmpl' = Consumer-App (kein PackagePrefix)
         [string]$DbPropsTemplate = 'Directory.Build.props.tmpl',
@@ -122,9 +122,9 @@ function New-BwRepoBase {
 
     $visibility = if ($Public) { '--public' } else { '--private' }
     $githubUser = Get-BwGithubUser
-    $tokens = @{ ORG = $Org; REPO = $RepoName; USER = $githubUser; YEAR = (Get-Date).Year }
+    $tokens = @{ ORG = $Owner; REPO = $RepoName; USER = $githubUser; YEAR = (Get-Date).Year }
 
-    Write-Host "==> Basis-Repo: $Org/$RepoName  (Owner-Account: $githubUser, $visibility)" -ForegroundColor Cyan
+    Write-Host "==> Basis-Repo: $Owner/$RepoName  (Owner-Account: $githubUser, $visibility)" -ForegroundColor Cyan
 
     # 1. Lokaler Ordner + Git
     $repoDir = if ($TargetDirectory) {
@@ -164,7 +164,7 @@ function New-BwRepoBase {
     git add .
     git commit -m 'chore: initial repo scaffold (base, ci)'
     Write-Host "==> Erstelle Remote-Repo $Org/$RepoName..." -ForegroundColor Cyan
-    gh repo create "$Org/$RepoName" $visibility --source=. --remote=origin --push
+    gh repo create "$Owner/$RepoName" $visibility --source=. --remote=origin --push
 
     # 7. Branches: immer main + staging + dev
     Write-Host "==> Erstelle Branches (staging, dev)..." -ForegroundColor Cyan
@@ -173,7 +173,7 @@ function New-BwRepoBase {
     git checkout dev
 
     # 8. Default-Branch = dev
-    gh repo edit "$Org/$RepoName" --default-branch dev
+    gh repo edit "$Owner/$RepoName" --default-branch dev
 
     # 9. Branch Protection - nur bei PUBLIC (Free-Plan kann es fuer private nicht)
     if ($Public) {
@@ -190,7 +190,7 @@ function New-BwRepoBase {
         } | ConvertTo-Json -Depth 10
         foreach ($branch in @('main', 'staging', 'dev')) {
             try {
-                $protection | gh api --method PUT "/repos/$Org/$RepoName/branches/$branch/protection" --input - | Out-Null
+                $protection | gh api --method PUT "/repos/$Owner/$RepoName/branches/$branch/protection" --input - | Out-Null
                 Write-Host "    geschuetzt: $branch" -ForegroundColor Gray
             } catch {
                 Write-Host "    Protection fuer '$branch' fehlgeschlagen: $($_.Exception.Message)" -ForegroundColor Yellow
@@ -200,7 +200,7 @@ function New-BwRepoBase {
         Write-Host "==> Privates Repo auf Free-Plan: Branch Protection nicht verfuegbar - uebersprungen." -ForegroundColor DarkGray
     }
 
-    Write-BwPackagesTokenHint -Org $Org -RepoName $RepoName
+    Write-BwPackagesTokenHint -Owner $Owner -RepoName $RepoName
     Write-Host "==> Basis steht (Branch: dev)." -ForegroundColor Green
 }
 
@@ -210,11 +210,11 @@ function New-BwRepo {
     [CmdletBinding()]
     param(
         [Parameter(Mandatory)][string]$RepoName,
-        [string]$Org = 'BieberWorks',
+        [string]$Owner = 'BieberWorks',
         [string]$TargetDirectory = '',
         [switch]$Public
     )
-    New-BwRepoBase -RepoName $RepoName -Org $Org -TargetDirectory $TargetDirectory -Public:$Public
+    New-BwRepoBase -RepoName $RepoName -Owner $Owner -TargetDirectory $TargetDirectory -Public:$Public
 
     Write-Host "==> Lege leere Standard-Ordner (src/tests/docs) + Solution an..." -ForegroundColor Cyan
     foreach ($folder in @('src', 'tests', 'docs')) {
@@ -225,7 +225,7 @@ function New-BwRepo {
     Write-Utf8NoBom -Path "$RepoName.slnx"               -Content (Expand-BwTemplate 'solution.slnx.tmpl')
 
     Invoke-BwCommitPush -Message 'chore: add solution skeleton (src/tests/docs, slnx)'
-    Write-Host "==> Fertig! '$Org/$RepoName' steht bereit (Branch: dev)." -ForegroundColor Green
+    Write-Host "==> Fertig! '$Owner/$RepoName' steht bereit (Branch: dev)." -ForegroundColor Green
 }
 
 # --- Schicht 1b: Typ-Repo via dotnet-new-Template + Deployment ---------------
@@ -237,7 +237,7 @@ function New-BwTemplateRepo {
         [Parameter(Mandatory)][string]$Template,                       # dotnet new shortName
         [Parameter(Mandatory)][ValidateSet('docker', 'packages')][string]$Deploy,
         [string]$DotnetName = '',   # -n Argument fuer dotnet new; Standard = $RepoName
-        [string]$Org = 'BieberWorks',
+        [string]$Owner = 'BieberWorks',
         # Welches Directory.Build.props-Template verwenden?
         # 'Directory.Build.props.tmpl'          = SDK-Modul (PackagePrefix + NuGet-Publishing, Default)
         # 'Directory.Build.consumer.props.tmpl' = Consumer-App (kein PackagePrefix, kein NuGet-Publishing)
@@ -245,7 +245,7 @@ function New-BwTemplateRepo {
         [string]$TargetDirectory = '',
         [switch]$Public
     )
-    New-BwRepoBase -RepoName $RepoName -Org $Org -DbPropsTemplate $DbPropsTemplate -TargetDirectory $TargetDirectory -Public:$Public
+    New-BwRepoBase -RepoName $RepoName -Owner $Owner -DbPropsTemplate $DbPropsTemplate -TargetDirectory $TargetDirectory -Public:$Public
 
     $nameArg = if ($DotnetName) { $DotnetName } else { $RepoName }
     Write-Host "==> Solution-Geruest + 'dotnet new $Template -n $nameArg'..." -ForegroundColor Cyan
@@ -269,7 +269,7 @@ function New-BwTemplateRepo {
     Invoke-BwCommitPush -Message "chore: scaffold $Template project + solution"
 
     if ($Deploy -eq 'docker') { Add-BwDockerPublish } else { Add-BwPackageDeployment }
-    Write-Host "==> Fertig! '$Org/$RepoName' steht bereit (Branch: dev)." -ForegroundColor Green
+    Write-Host "==> Fertig! '$Owner/$RepoName' steht bereit (Branch: dev)." -ForegroundColor Green
 }
 
 # --- Schicht 2: Package-Deployment (NuGet-Release) --------------------------

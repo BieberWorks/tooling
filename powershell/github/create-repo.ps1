@@ -6,10 +6,10 @@
 #   .\create-repo.ps1 -RepoName <Name> -Public    # oeffentlich (ermoeglicht Branch Protection)
 param(
     [Parameter(Mandatory)][string]$RepoName,
-    [Parameter(Mandatory)][string]$Org,
+    [Parameter(Mandatory)][string]$Owner,
     [string]$TargetDirectory = '',
     [switch]$Public
 )
 $ErrorActionPreference = 'Stop'
 Import-Module (Join-Path $PSScriptRoot '..\modules\BieberWorks.RepoSetup\BieberWorks.RepoSetup.psd1') -Force
-New-BwRepo -RepoName $RepoName -Org $Org -TargetDirectory $TargetDirectory -Public:$Public
+New-BwRepo -RepoName $RepoName -Owner $Owner -TargetDirectory $TargetDirectory -Public:$Public

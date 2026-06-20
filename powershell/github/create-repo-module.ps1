@@ -5,7 +5,7 @@
 #   .\create-repo-module.ps1 -RepoName <Name> [-Public]
 param(
     [Parameter(Mandatory)][string]$RepoName,
-    [Parameter(Mandatory)][string]$Org,
+    [Parameter(Mandatory)][string]$Owner,
     [string]$TargetDirectory = '',
     [switch]$Public
 )
@@ -23,4 +23,4 @@ $ModuleName  = $RepoName -replace '^SDK-', ''
 $DotnetName  = "BieberWorks.SDK.$ModuleName"
 
 Import-Module (Join-Path $PSScriptRoot '..\modules\BieberWorks.RepoSetup\BieberWorks.RepoSetup.psd1') -Force
-New-BwTemplateRepo -RepoName $RepoName -DotnetName $DotnetName -Template 'bieberworks-module' -Deploy 'packages' -Org $Org -TargetDirectory $TargetDirectory -Public:$Public
+New-BwTemplateRepo -RepoName $RepoName -DotnetName $DotnetName -Template 'bieberworks-module' -Deploy 'packages' -Owner $Owner -TargetDirectory $TargetDirectory -Public:$Public
