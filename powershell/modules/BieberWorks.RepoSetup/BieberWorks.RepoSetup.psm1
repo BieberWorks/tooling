@@ -261,7 +261,7 @@ function New-BwTemplateRepo {
     # Template instanziieren in den Repo-Root. Das Template bringt seine Projekte
     # unter src/<Name> (+ tests/<Name>.Tests) mit; KEINE repo-globalen Dateien
     # (die liefert die Basis) und KEINE eigene .slnx.
-    dotnet new $Template -n $nameArg -o .
+    dotnet new $Template -n $nameArg -o . --force
 
     # Alle erzeugten csproj in die Solution aufnehmen (src/ und tests/ getrennt).
     Get-ChildItem -Path 'src'   -Recurse -Filter *.csproj -ErrorAction SilentlyContinue | ForEach-Object {
