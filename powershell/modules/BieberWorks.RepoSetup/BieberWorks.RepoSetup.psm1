@@ -121,6 +121,7 @@ function New-BwRepoBase {
         # 'Directory.Build.props.tmpl'          = SDK-Modul (Default)
         # 'Directory.Build.consumer.props.tmpl' = Consumer-App (kein PackagePrefix)
         [string]$DbPropsTemplate = 'Directory.Build.props.tmpl',
+        [string]$ReadmeTemplate = 'README.module.tmpl',
         [string]$TargetDirectory = '',
         [switch]$Public
     )
@@ -147,7 +148,7 @@ function New-BwRepoBase {
     # 3. LICENSE, README, nuget.config, Directory.Build.props
     Write-Host "==> Lege LICENSE, README, nuget.config, Directory.Build.props ($DbPropsTemplate), CI an..." -ForegroundColor Cyan
     Write-Utf8NoBom -Path 'LICENSE'               -Content (Expand-BwTemplate 'LICENSE.tmpl' $tokens)
-    Write-Utf8NoBom -Path 'README.md'             -Content (Expand-BwTemplate 'README.module.tmpl' $tokens)
+    Write-Utf8NoBom -Path 'README.md'             -Content (Expand-BwTemplate $ReadmeTemplate $tokens)
     Write-Utf8NoBom -Path 'nuget.config'          -Content (Expand-BwTemplate 'nuget.config')
     Write-Utf8NoBom -Path 'Directory.Build.props' -Content (Expand-BwTemplate $DbPropsTemplate $tokens)
 
@@ -247,10 +248,11 @@ function New-BwTemplateRepo {
         # 'Directory.Build.props.tmpl'          = SDK-Modul (PackagePrefix + NuGet-Publishing, Default)
         # 'Directory.Build.consumer.props.tmpl' = Consumer-App (kein PackagePrefix, kein NuGet-Publishing)
         [string]$DbPropsTemplate = 'Directory.Build.props.tmpl',
+        [string]$ReadmeTemplate = 'README.module.tmpl',
         [string]$TargetDirectory = '',
         [switch]$Public
     )
-    New-BwRepoBase -RepoName $RepoName -Owner $Owner -DbPropsTemplate $DbPropsTemplate -TargetDirectory $TargetDirectory -Public:$Public
+    New-BwRepoBase -RepoName $RepoName -Owner $Owner -DbPropsTemplate $DbPropsTemplate -ReadmeTemplate $ReadmeTemplate -TargetDirectory $TargetDirectory -Public:$Public
 
     $nameArg = if ($DotnetName) { $DotnetName } else { $RepoName }
     Write-Host "==> Solution-Geruest + 'dotnet new $Template -n $nameArg'..." -ForegroundColor Cyan
@@ -377,6 +379,7 @@ function New-BwAppRepo {
         -Template 'bw-blazor' `
         -Deploy 'docker' `
         -DbPropsTemplate 'Directory.Build.consumer.props.tmpl' `
+        -ReadmeTemplate 'README.consumer.tmpl' `
         -Owner $Owner `
         -TargetDirectory $TargetDirectory `
         -Public:$Public
@@ -395,6 +398,7 @@ function New-BwApiRepo {
         -Template 'bw-api' `
         -Deploy 'docker' `
         -DbPropsTemplate 'Directory.Build.consumer.props.tmpl' `
+        -ReadmeTemplate 'README.consumer.tmpl' `
         -Owner $Owner `
         -TargetDirectory $TargetDirectory `
         -Public:$Public
@@ -413,6 +417,7 @@ function New-BwWasmApiRepo {
         -Template 'bw-wasm-api' `
         -Deploy 'docker' `
         -DbPropsTemplate 'Directory.Build.consumer.props.tmpl' `
+        -ReadmeTemplate 'README.consumer.tmpl' `
         -Owner $Owner `
         -TargetDirectory $TargetDirectory `
         -Public:$Public
@@ -431,6 +436,7 @@ function New-BwWasmRepo {
         -Template 'bw-wasm' `
         -Deploy 'docker' `
         -DbPropsTemplate 'Directory.Build.consumer.props.tmpl' `
+        -ReadmeTemplate 'README.consumer.tmpl' `
         -Owner $Owner `
         -TargetDirectory $TargetDirectory `
         -Public:$Public

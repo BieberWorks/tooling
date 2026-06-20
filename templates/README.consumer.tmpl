@@ -1,0 +1,24 @@
+# __REPO__
+
+Anwendung auf Basis des **BieberWorks SDK** — privat, gebaut mit .NET 10 und Blazor.
+
+## Entwicklung
+
+```powershell
+dotnet restore
+dotnet run --project src/__REPO__
+```
+
+Voraussetzung: `BIEBERWORKS_NUGET_TOKEN` als Umgebungsvariable setzen (GitHub PAT mit `read:packages`).
+
+## Branch-Flow
+
+`main` <- `staging` <- `dev`  (Default-Branch: `dev`)
+
+## Deployment
+
+Docker-Image wird bei Push auf `main`/`staging` automatisch nach GHCR gebaut und gepusht.
+
+## Lizenz
+
+Proprietaer - siehe [LICENSE](./LICENSE).
