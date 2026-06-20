@@ -11,8 +11,13 @@
 
 $ErrorActionPreference = 'Stop'
 
-# templates/ liegt relativ zum Modul: <repo>/templates, Modul: <repo>/powershell/modules/BieberWorks.RepoSetup
-$script:TemplateRoot = (Resolve-Path (Join-Path $PSScriptRoot '..\..\..\templates')).Path
+# templates/ suchen: zuerst lokales Unterverzeichnis (nach Install-Module), dann relativer Fallback (lokale Repo-Entwicklung)
+$localTemplates = Join-Path $PSScriptRoot 'templates'
+$script:TemplateRoot = if (Test-Path $localTemplates) {
+    $localTemplates
+} else {
+    (Resolve-Path (Join-Path $PSScriptRoot '..\..\..\templates')).Path
+}
 
 # --- Helper -----------------------------------------------------------------
 
@@ -333,7 +338,117 @@ function Add-BwDockerPublish {
     Write-Host '==> Docker-Publish-Workflow aktiv (Image -> GHCR).' -ForegroundColor Green
 }
 
+# --- Schicht 3: High-Level-Wrapper (oeffentliche API) ------------------------
+
+function New-BwModuleRepo {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)][string]$RepoName,
+        [Parameter(Mandatory)][string]$Owner,
+        [string]$TargetDirectory = '',
+        [switch]$Public
+    )
+    if ($RepoName -notmatch '^SDK-') {
+        throw "RepoName muss mit 'SDK-' beginnen (z.B. SDK-Forum)."
+    }
+    $ModuleName = $RepoName -replace '^SDK-', ''
+    $DotnetName = "BieberWorks.SDK.$ModuleName"
+    New-BwTemplateRepo `
+        -RepoName $RepoName `
+        -DotnetName $DotnetName `
+        -Template 'bieberworks-module' `
+        -Deploy 'packages' `
+        -DbPropsTemplate 'Directory.Build.props.tmpl' `
+        -Owner $Owner `
+        -TargetDirectory $TargetDirectory `
+        -Public:$Public
+}
+
+function New-BwAppRepo {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)][string]$RepoName,
+        [Parameter(Mandatory)][string]$Owner,
+        [string]$TargetDirectory = '',
+        [switch]$Public
+    )
+    New-BwTemplateRepo `
+        -RepoName $RepoName `
+        -Template 'bw-blazor' `
+        -Deploy 'docker' `
+        -DbPropsTemplate 'Directory.Build.consumer.props.tmpl' `
+        -Owner $Owner `
+        -TargetDirectory $TargetDirectory `
+        -Public:$Public
+}
+
+function New-BwApiRepo {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)][string]$RepoName,
+        [Parameter(Mandatory)][string]$Owner,
+        [string]$TargetDirectory = '',
+        [switch]$Public
+    )
+    New-BwTemplateRepo `
+        -RepoName $RepoName `
+        -Template 'bw-api' `
+        -Deploy 'docker' `
+        -DbPropsTemplate 'Directory.Build.consumer.props.tmpl' `
+        -Owner $Owner `
+        -TargetDirectory $TargetDirectory `
+        -Public:$Public
+}
+
+function New-BwWasmApiRepo {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)][string]$RepoName,
+        [Parameter(Mandatory)][string]$Owner,
+        [string]$TargetDirectory = '',
+        [switch]$Public
+    )
+    New-BwTemplateRepo `
+        -RepoName $RepoName `
+        -Template 'bw-wasm-api' `
+        -Deploy 'docker' `
+        -DbPropsTemplate 'Directory.Build.consumer.props.tmpl' `
+        -Owner $Owner `
+        -TargetDirectory $TargetDirectory `
+        -Public:$Public
+}
+
+function New-BwWasmRepo {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)][string]$RepoName,
+        [Parameter(Mandatory)][string]$Owner,
+        [string]$TargetDirectory = '',
+        [switch]$Public
+    )
+    New-BwTemplateRepo `
+        -RepoName $RepoName `
+        -Template 'bw-wasm' `
+        -Deploy 'docker' `
+        -DbPropsTemplate 'Directory.Build.consumer.props.tmpl' `
+        -Owner $Owner `
+        -TargetDirectory $TargetDirectory `
+        -Public:$Public
+}
+
+function New-BwBlankRepo {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)][string]$RepoName,
+        [Parameter(Mandatory)][string]$Owner,
+        [string]$TargetDirectory = '',
+        [switch]$Public
+    )
+    New-BwRepo -RepoName $RepoName -Owner $Owner -TargetDirectory $TargetDirectory -Public:$Public
+}
+
 Export-ModuleMember -Function `
-    New-BwRepoBase, New-BwRepo, New-BwTemplateRepo, `
-    Add-BwPackageDeployment, Add-BwDockerPublish, Add-BwSlnxItem, `
-    Get-BwGithubUser, Get-BwRepoIdentity
+    New-BwModuleRepo, New-BwAppRepo, New-BwApiRepo, `
+    New-BwWasmApiRepo, New-BwWasmRepo, New-BwBlankRepo, `
+    Get-BwGithubUser, Get-BwRepoIdentity, `
+    Add-BwPackageDeployment, Add-BwDockerPublish, Add-BwSlnxItem

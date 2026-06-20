@@ -7,26 +7,38 @@
 @{
 
     RootModule        = 'BieberWorks.RepoSetup.psm1'
-    ModuleVersion     = '0.2.0'
+    ModuleVersion     = '1.0.0'
     GUID              = '4074db7a-2b9a-453d-8304-b86e04e81066'
-    Author            = 'Pierre Bieber'
+    Author            = 'BieberWorks'
     CompanyName       = 'BieberWorks'
-    Copyright         = '(c) 2026 Pierre Bieber. Alle Rechte vorbehalten.'
-    Description       = 'Geteilte Bausteine zum Anlegen neuer BieberWorks-SDK-Repos (create-repo + create-repo-<typ> + add-* Scripts).'
-    PowerShellVersion = '5.1'
+    Copyright         = '(c) 2026 BieberWorks. Alle Rechte vorbehalten.'
+    Description       = 'BieberWorks SDK Repo-Setup Tools — New-BwAppRepo, New-BwModuleRepo, New-BwApiRepo, New-BwWasmApiRepo, New-BwWasmRepo, New-BwBlankRepo und Hilfsfunktionen.'
+    PowerShellVersion = '7.2'
 
     FunctionsToExport = @(
-        'New-BwRepoBase',
-        'New-BwRepo',
-        'New-BwTemplateRepo',
+        'New-BwModuleRepo',
+        'New-BwAppRepo',
+        'New-BwApiRepo',
+        'New-BwWasmApiRepo',
+        'New-BwWasmRepo',
+        'New-BwBlankRepo',
+        'Get-BwGithubUser',
+        'Get-BwRepoIdentity',
         'Add-BwPackageDeployment',
         'Add-BwDockerPublish',
-        'Add-BwSlnxItem',
-        'Get-BwGithubUser',
-        'Get-BwRepoIdentity'
+        'Add-BwSlnxItem'
     )
     CmdletsToExport   = @()
     VariablesToExport = @()
     AliasesToExport   = @()
+
+    PrivateData = @{
+        PSData = @{
+            Tags        = @('BieberWorks', 'SDK', 'Repo', 'Setup')
+            ProjectUri  = 'https://github.com/BieberWorks/tooling'
+            LicenseUri  = 'https://github.com/BieberWorks/tooling/blob/main/LICENSE'
+            ReleaseNotes = ''
+        }
+    }
 
 }

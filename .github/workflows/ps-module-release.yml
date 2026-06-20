@@ -1,0 +1,47 @@
+name: Publish PowerShell Module
+
+on:
+  push:
+    tags:
+      - 'ps-v*'
+
+permissions:
+  packages: write
+  contents: read
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Copy templates into module
+        run: cp -r templates/ powershell/modules/BieberWorks.RepoSetup/templates/
+
+      - name: Extract version from tag
+        id: version
+        run: echo "version=${GITHUB_REF_NAME#ps-v}" >> $GITHUB_OUTPUT
+
+      - name: Update module version
+        run: |
+          sed -i "s/ModuleVersion = '[^']*'/ModuleVersion = '${{ steps.version.outputs.version }}'/" \
+            powershell/modules/BieberWorks.RepoSetup/BieberWorks.RepoSetup.psd1
+
+      - name: Register GitHub Packages as PS repository
+        shell: pwsh
+        run: |
+          $cred = New-Object PSCredential("BieberWorks", (ConvertTo-SecureString "${{ secrets.GITHUB_TOKEN }}" -AsPlainText -Force))
+          Register-PSRepository -Name BieberWorks `
+            -SourceLocation "https://nuget.pkg.github.com/BieberWorks/index.json" `
+            -PublishLocation "https://nuget.pkg.github.com/BieberWorks/" `
+            -InstallationPolicy Trusted `
+            -Credential $cred
+
+      - name: Publish module
+        shell: pwsh
+        run: |
+          $cred = New-Object PSCredential("BieberWorks", (ConvertTo-SecureString "${{ secrets.GITHUB_TOKEN }}" -AsPlainText -Force))
+          Publish-Module -Path "powershell/modules/BieberWorks.RepoSetup" `
+            -Repository BieberWorks `
+            -Credential $cred `
+            -NuGetApiKey "${{ secrets.GITHUB_TOKEN }}"

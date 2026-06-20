@@ -22,5 +22,9 @@ if ($RepoName -notmatch '^SDK-') {
 $ModuleName  = $RepoName -replace '^SDK-', ''
 $DotnetName  = "BieberWorks.SDK.$ModuleName"
 
-Import-Module (Join-Path $PSScriptRoot '..\modules\BieberWorks.RepoSetup\BieberWorks.RepoSetup.psd1') -Force
-New-BwTemplateRepo -RepoName $RepoName -DotnetName $DotnetName -Template 'bieberworks-module' -Deploy 'packages' -Owner $Owner -TargetDirectory $TargetDirectory -Public:$Public
+if (Get-Module -ListAvailable -Name BieberWorks.RepoSetup) {
+    Import-Module BieberWorks.RepoSetup -Force
+} else {
+    Import-Module (Join-Path $PSScriptRoot '..\modules\BieberWorks.RepoSetup\BieberWorks.RepoSetup.psd1') -Force
+}
+New-BwModuleRepo -RepoName $RepoName -Owner $Owner -TargetDirectory $TargetDirectory -Public:$Public

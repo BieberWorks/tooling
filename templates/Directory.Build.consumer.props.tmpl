@@ -1,0 +1,32 @@
+<Project>
+
+  <!--
+    ============================================================
+    Shared MSBuild properties (Consumer-App-Repo).
+    KEIN PackagePrefix, KEIN GenerateDocumentationFile,
+    KEIN PackageId-Magic — Consumer-Apps sind keine NuGet-Pakete.
+    ============================================================
+  -->
+
+  <PropertyGroup>
+    <!-- bin/obj zentral nach ./artifacts. -->
+    <UseArtifactsOutput>true</UseArtifactsOutput>
+    <ArtifactsPath>$(MSBuildThisFileDirectory)artifacts</ArtifactsPath>
+  </PropertyGroup>
+
+  <!-- Repo-Identitaet -->
+  <PropertyGroup>
+    <Company>__ORG__</Company>
+    <Authors>__USER__</Authors>
+    <RepositoryUrl>https://github.com/__ORG__/__REPO__</RepositoryUrl>
+  </PropertyGroup>
+
+  <!-- Code-Qualitaet -->
+  <PropertyGroup>
+    <EnforceCodeStyleInBuild>true</EnforceCodeStyleInBuild>
+    <AnalysisLevel>latest</AnalysisLevel>
+    <TreatWarningsAsErrors>false</TreatWarningsAsErrors>
+    <CodeAnalysisTreatWarningsAsErrors>false</CodeAnalysisTreatWarningsAsErrors>
+  </PropertyGroup>
+
+</Project>
