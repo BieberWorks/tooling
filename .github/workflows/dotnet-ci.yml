@@ -31,7 +31,7 @@ jobs:
         run: |
           dotnet nuget remove source bieberworks-local || true
           dotnet nuget remove source bieberworks || true
-          dotnet nuget add source "https://nuget.pkg.github.com/${{ github.repository_owner }}/index.json" \
+          dotnet nuget add source "https://nuget.pkg.github.com/BieberWorks/index.json" \
             --name bieberworks --username "${{ github.actor }}" \
             --password "${{ secrets.PACKAGES_TOKEN }}" --store-password-in-clear-text || true
 
