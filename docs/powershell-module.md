@@ -25,20 +25,21 @@ und kann ueber PowerShellGet v2 (`Install-Module`) installiert werden.
 Zunaechst den privaten Feed registrieren. Der PACKAGES_TOKEN (PAT mit `read:packages`) liegt in
 `C:\Users\biebe\source\repos\BieberWorks\.secrets.txt`.
 
+PowerShellGet v2 (Windows PowerShell 5.1 Standard) unterstützt den NuGet v3-Feed von GitHub Packages nicht — PSResourceGet ist erforderlich.
+
 ```powershell
 $token = (Get-Content "C:\Users\biebe\source\repos\BieberWorks\.secrets.txt" |
           Select-String "^ghp_" | ForEach-Object { $_.Line.Trim() })
 
 $cred = New-Object PSCredential("BieberWorks", (ConvertTo-SecureString $token -AsPlainText -Force))
 
-Register-PSRepository `
+Register-PSResourceRepository `
     -Name BieberWorks `
-    -SourceLocation "https://nuget.pkg.github.com/BieberWorks/index.json" `
-    -PublishLocation "https://nuget.pkg.github.com/BieberWorks/" `
-    -InstallationPolicy Trusted `
+    -Uri "https://nuget.pkg.github.com/BieberWorks/index.json" `
+        -InstallationPolicy Trusted `
     -Credential $cred
 
-Install-Module BieberWorks.RepoSetup -Repository BieberWorks -Credential $cred
+Install-PSResource BieberWorks.RepoSetup -Repository BieberWorks -Credential $cred
 ```
 
 ---
@@ -175,7 +176,7 @@ Write-Host $id.NameWithOwner  # z.B. BieberWorks/SDK-Forum
 
 ```powershell
 $cred = New-Object PSCredential("BieberWorks", (ConvertTo-SecureString $token -AsPlainText -Force))
-Update-Module BieberWorks.RepoSetup -Repository BieberWorks -Credential $cred
+Update-PSResource BieberWorks.RepoSetup -Repository BieberWorks -Credential $cred
 ```
 
 ---
