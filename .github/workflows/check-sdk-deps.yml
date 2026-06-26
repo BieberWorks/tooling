@@ -27,9 +27,10 @@ jobs:
         run: |
           failed=0
           for f in $(find . -name "*.Contracts.csproj" -o -name "*.Presentation.csproj"); do
-            if grep -qE "MudBlazor|Microsoft\.AspNetCore\.(Components|App)" "$f"; then
+            # Only inspect reference lines, not <Description> prose (which may say "no MudBlazor").
+            if grep -E "<(PackageReference|FrameworkReference)" "$f" | grep -qE "MudBlazor|Microsoft\.AspNetCore\.(Components|App)"; then
               echo "FAIL [Rule 1]: $f references MudBlazor or AspNetCore.Components"
-              grep -E "MudBlazor|Microsoft\.AspNetCore\.(Components|App)" "$f"
+              grep -E "<(PackageReference|FrameworkReference)" "$f" | grep -E "MudBlazor|Microsoft\.AspNetCore\.(Components|App)"
               failed=1
             fi
           done
@@ -47,9 +48,10 @@ jobs:
           failed=0
           for f in $(find . \( -name "*.UI.Blazor.csproj" -o -name "*.UI.csproj" \) \
                     | grep -v "\.UI\.Blazor\.MudBlazor\|\.UI\.MudBlazor\|\.UI\.Blazor\.FluentUI\|\.UI\.Avalonia\|\.UI\.Wpf"); do
-            if grep -q "MudBlazor" "$f"; then
+            # Only inspect <PackageReference> lines, not <Description> prose ("Kein MudBlazor").
+            if grep -E "<PackageReference" "$f" | grep -q "MudBlazor"; then
               echo "FAIL [Rule 2]: $f references MudBlazor (only *.UI.Blazor.MudBlazor packages may)"
-              grep "MudBlazor" "$f"
+              grep -E "<PackageReference" "$f" | grep "MudBlazor"
               failed=1
             fi
           done
@@ -106,9 +108,10 @@ jobs:
         run: |
           failed=0
           for f in $(find . -name "*.Presentation.csproj"); do
-            if grep -qE "Microsoft\.AspNetCore\.Components|FrameworkReference" "$f"; then
+            # <FrameworkReference> is a real element (never prose); AspNetCore.Components only via reference lines.
+            if grep -qE "<FrameworkReference" "$f" || grep -E "<PackageReference" "$f" | grep -qE "Microsoft\.AspNetCore\.Components"; then
               echo "FAIL [Rule 4]: $f references AspNetCore.Components or uses FrameworkReference"
-              grep -E "Microsoft\.AspNetCore\.Components|FrameworkReference" "$f"
+              grep -E "<FrameworkReference|<PackageReference" "$f" | grep -E "Microsoft\.AspNetCore\.Components|FrameworkReference"
               failed=1
             fi
           done
