@@ -1,0 +1,119 @@
+name: SDK Dependency Leakage Checks (reusable)
+
+# Reusable Workflow: enforces cross-platform layering rules for BieberWorks SDK modules.
+# Four rules are checked:
+#   Rule 1 — *.Contracts / *.Presentation must not reference MudBlazor or AspNetCore.Components
+#   Rule 2 — *.UI(.Blazor) must not reference MudBlazor (only *.UI.Blazor.MudBlazor / *.UI.MudBlazor may)
+#   Rule 3 — No *.UI.Blazor.MudBlazor -> *.UI.Blazor.MudBlazor cross-reference (Skin-to-Skin)
+#             Also enforced for legacy *.UI.MudBlazor -> *.UI.MudBlazor (transition period)
+#             Also enforced for *.UI.Avalonia -> *.UI.Avalonia (future-proof)
+#   Rule 4 — *.Presentation must not reference Microsoft.AspNetCore.Components or FrameworkReference
+#
+# Usage from a module repo's workflow:
+#   jobs:
+#     sdk-dep-check:
+#       uses: BieberWorks/tooling/.github/workflows/check-sdk-deps.yml@v1
+on:
+  workflow_call: {}
+
+jobs:
+  leakage-check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      # Rule 1: *.Contracts and *.Presentation must not pull in MudBlazor or AspNetCore.Components
+      - name: Rule 1 — Contracts/Presentation must not reference MudBlazor or AspNetCore.Components
+        run: |
+          failed=0
+          for f in $(find . -name "*.Contracts.csproj" -o -name "*.Presentation.csproj"); do
+            if grep -qE "MudBlazor|Microsoft\.AspNetCore\.(Components|App)" "$f"; then
+              echo "FAIL [Rule 1]: $f references MudBlazor or AspNetCore.Components"
+              grep -E "MudBlazor|Microsoft\.AspNetCore\.(Components|App)" "$f"
+              failed=1
+            fi
+          done
+          if [ $failed -ne 0 ]; then
+            echo "ERROR: Rule 1 violated. *.Contracts/*.Presentation must not reference MudBlazor or AspNetCore.Components."
+            exit 1
+          fi
+          echo "Rule 1 passed."
+
+      # Rule 2: *.UI(.Blazor) must not reference MudBlazor directly.
+      # Transition period: matches both new *.UI.Blazor.csproj and legacy *.UI.csproj names,
+      # but excludes skin packages (*.UI.Blazor.MudBlazor / *.UI.MudBlazor / *.UI.Avalonia / *.UI.Wpf).
+      - name: Rule 2 — UI layer must not reference MudBlazor (only skin packages may)
+        run: |
+          failed=0
+          for f in $(find . \( -name "*.UI.Blazor.csproj" -o -name "*.UI.csproj" \) \
+                    | grep -v "\.UI\.Blazor\.MudBlazor\|\.UI\.MudBlazor\|\.UI\.Blazor\.FluentUI\|\.UI\.Avalonia\|\.UI\.Wpf"); do
+            if grep -q "MudBlazor" "$f"; then
+              echo "FAIL [Rule 2]: $f references MudBlazor (only *.UI.Blazor.MudBlazor packages may)"
+              grep "MudBlazor" "$f"
+              failed=1
+            fi
+          done
+          if [ $failed -ne 0 ]; then
+            echo "ERROR: Rule 2 violated. *.UI(.Blazor) must not reference MudBlazor."
+            exit 1
+          fi
+          echo "Rule 2 passed."
+
+      # Rule 3: No skin-to-skin cross-references.
+      # *.UI.Blazor.MudBlazor must not reference another *.UI.Blazor.MudBlazor package.
+      # Also checked: legacy *.UI.MudBlazor -> *.UI.MudBlazor (transition period).
+      # Also checked: *.UI.Avalonia -> *.UI.Avalonia (future-proof).
+      - name: Rule 3 — No skin-to-skin cross-references
+        run: |
+          failed=0
+
+          # New naming: *.UI.Blazor.MudBlazor -> *.UI.Blazor.MudBlazor
+          for f in $(find . -name "*.UI.Blazor.MudBlazor.csproj"); do
+            if grep -qE "Include=\"BieberWorks\.SDK\.[^\"]+\.UI\.Blazor\.MudBlazor\"" "$f"; then
+              echo "FAIL [Rule 3]: $f references another *.UI.Blazor.MudBlazor package"
+              grep -E "Include=\"BieberWorks\.SDK\.[^\"]+\.UI\.Blazor\.MudBlazor\"" "$f"
+              failed=1
+            fi
+          done
+
+          # Transition period: legacy *.UI.MudBlazor -> *.UI.MudBlazor
+          for f in $(find . -name "*.UI.MudBlazor.csproj" | grep -v "\.Blazor\.MudBlazor\.csproj"); do
+            if grep -qE "Include=\"BieberWorks\.SDK\.[^\"]+\.UI\.MudBlazor\"" "$f"; then
+              echo "FAIL [Rule 3]: $f references another *.UI.MudBlazor package (legacy name)"
+              grep -E "Include=\"BieberWorks\.SDK\.[^\"]+\.UI\.MudBlazor\"" "$f"
+              failed=1
+            fi
+          done
+
+          # Future-proof: *.UI.Avalonia -> *.UI.Avalonia
+          for f in $(find . -name "*.UI.Avalonia.csproj" -o -name "*.UI.Avalonia.Theme.*.csproj"); do
+            if grep -qE "Include=\"BieberWorks\.SDK\.[^\"]+\.UI\.Avalonia" "$f"; then
+              echo "FAIL [Rule 3]: $f references another *.UI.Avalonia package"
+              grep -E "Include=\"BieberWorks\.SDK\.[^\"]+\.UI\.Avalonia" "$f"
+              failed=1
+            fi
+          done
+
+          if [ $failed -ne 0 ]; then
+            echo "ERROR: Rule 3 violated. Skin-to-skin cross-references are forbidden."
+            exit 1
+          fi
+          echo "Rule 3 passed."
+
+      # Rule 4: *.Presentation must not reference AspNetCore.Components or use FrameworkReference.
+      # Only fires when a *.Presentation.csproj exists in the repo.
+      - name: Rule 4 — Presentation must not reference AspNetCore.Components
+        run: |
+          failed=0
+          for f in $(find . -name "*.Presentation.csproj"); do
+            if grep -qE "Microsoft\.AspNetCore\.Components|FrameworkReference" "$f"; then
+              echo "FAIL [Rule 4]: $f references AspNetCore.Components or uses FrameworkReference"
+              grep -E "Microsoft\.AspNetCore\.Components|FrameworkReference" "$f"
+              failed=1
+            fi
+          done
+          if [ $failed -ne 0 ]; then
+            echo "ERROR: Rule 4 violated. *.Presentation must not reference AspNetCore.Components."
+            exit 1
+          fi
+          echo "Rule 4 passed (no *.Presentation.csproj found or all clean)."
