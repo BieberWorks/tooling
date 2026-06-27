@@ -8,6 +8,14 @@ echten `PackageReference Include="BieberWorks.SDK.*"`-Einträgen aller `.csproj`
 rg 'PackageReference\s+Include="BieberWorks\.SDK\.' -g 'SDK-*/**/*.csproj'
 ```
 
+> **Maschinenlesbare Quelle:** Die kanonische Promote-Reihenfolge (Modul → Stufe 0–5) liegt als
+> [`tooling/release-order.json`](../release-order.json) — **die eine Wahrheit**. Diese .md ist die
+> erzählerische Begleitung. Die SdkInfoApp liest `release-order.json` (release-Modus via gh, local
+> aus der tooling-Working-Copy) und zeigt sie als `releaseOrder` neben dem berechneten
+> `dependencyTier` (impl-Longest-Path) an. Die `releaseOrder` ist **kuratiert** (kein sauberer
+> Longest-Path — Begründung siehe Memory `sdk-release-order`); ein Drift-Check in der App warnt,
+> wenn eine neue `impl`-Dependency ihr widerspricht.
+
 ## Kernaussage
 
 **Es gibt keinen echten Architektur-Zyklus.** Die `*.Contracts`-Pakete bilden einen
