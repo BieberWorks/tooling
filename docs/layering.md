@@ -111,13 +111,47 @@ Rule of thumb: *observable-state string → Presentation; markup-only string →
 | Library | Role | Notes |
 | --- | --- | --- |
 | `SDK-Foundation` | `SharedKernel`, `Core`, `Core.Web`, `Core.Postgres` | dependency-free primitives + host-neutral module/messaging infra (`SharedKernel`/`Core` are portable; `Core.Web`/`Core.Postgres` are server-bound). |
-| `SDK-UI` | the shared **View / skin** layer | `UI.Contracts` = framework-neutral abstractions (theming, cookies, component overrides, time zone, viewport). `UI.Blazor.MudBlazor` = shared MudBlazor components (`BwDataView`, `BwShellLayout`, `BwRouter`, `BwThemeProvider`, …). **This is the most Blazor-bound shared layer — it is not "presentation".** |
-| `SDK-Components` | shared **content-rendering** lib (opt-in) | Markdown / code-highlighting / rich-text. Self-contained, depends on neither SDK-UI nor any feature module. Pulled in **only** by modules that render rich content (today: Pages, Legal). The neutral parsers live in `Components.Contracts`. |
-| `SDK.Presentation` *(planned)* | shared **ViewModel base** | A small base for `*.Presentation` modules (CommunityToolkit.Mvvm wiring, base ViewModel, common state/command patterns). **Not** SDK-UI renamed — a separate, framework-neutral package. Extracted from the rollout the moment a shared pattern actually repeats, not pre-emptively. |
+| `SDK-Presentation` | shared **ViewModel base class** | `BwViewModel` (CommunityToolkit.Mvvm): `IsBusy`/`ErrorMessage`/`SuccessMessage` + `RunGuardedAsync`/`<T>`. Framework-neutral, no UI. Every `*.Presentation` **inherits** it. |
+| `SDK-UI` | shared **View** layer — *two natures* (see below) | `UI.Contracts` = framework-neutral abstractions (theming, cookies, overrides, time zone, viewport). `UI.Blazor` = the **View base class** `BwViewComponent<TVm>` (MudBlazor-free, holds the ViewModel→view bridge). `UI.Blazor.MudBlazor` = the shared MudBlazor **component library** (`BwDataView`, `BwShellLayout`, `BwAppBar`, `BwThemeProvider`, …). |
+| `SDK-Components` | shared **content-rendering** lib (opt-in) | Markdown / code-highlighting / rich-text. Self-contained, depends on neither SDK-UI nor any feature module. Pulled in **only** by modules that render rich content (today: Pages, Legal). The neutral parsers live in `Components.Contracts` and are reusable by any host. |
+
+### Base class vs library — the key distinction
+
+The two "shared base" modules are **different kinds of thing**, which is why their references differ:
+
+- **Inheritance base** (`SDK-Presentation`'s `BwViewModel`, `SDK-UI`'s `BwViewComponent<TVm>`): a layer
+  **inherits** from it (`LoginViewModel : BwViewModel`, `LoginBase : BwViewComponent<LoginViewModel>`).
+  This is an *is-a* relationship → a **mandatory** reference for that layer. Every `*.Presentation`
+  references `SDK.Presentation`; every `*.UI.Blazor` references `SDK.UI.Blazor`.
+- **Library** (`SDK-UI`'s `UI.Blazor.MudBlazor` components like `BwDataView`, and `SDK-Components`):
+  a layer **uses** it *when it needs it* (`<BwDataView … />`). This is *uses-a* → an **on-demand**
+  reference. A skin references `UI.Blazor.MudBlazor` only because it actually renders a `BwDataView` /
+  shell; a form-only skin that needs neither simply doesn't.
+
+So **not** every `*.UI.Blazor` references SDK-UI's components, and `*.Contracts`/`*` (impl) reference
+neither base — they sit directly on Foundation. Dependencies always flow **downward** (feature layer →
+its base → Foundation); nothing shared ever references a feature module.
 
 > **SDK-UI is not renamed to "Presentation".** It is the shared *View* layer; calling it
-> Presentation would name it after the opposite of what it is. The framework-neutral parts already
-> live in `UI.Contracts`, cleanly separated from `UI.Blazor.MudBlazor`.
+> Presentation would name it after the opposite of what it is.
+
+---
+
+## Package granularity — when does something get its own package?
+
+Neither a grab-bag nor nano-packages. The deciding factor is **dependency footprint**, *not* how many
+modules use it:
+
+- A component gets its **own package** only when it brings a **distinct heavy or conflicting
+  dependency** that non-users would otherwise have to carry (e.g. a PDF engine, a native binary, a
+  charting JS lib with version constraints).
+- Otherwise it stays in the **cohesive, opt-in** library — even if used once.
+- **Anything placed in `SDK.UI.Blazor.MudBlazor` is carried by *every* skin** (it is the universal
+  shared component lib). So only broadly-relevant app-frame infrastructure with **no extra third-party
+  deps** belongs there (data grid, shell, app bar, theme, time, viewport, cookies). Specialised
+  concerns with their own deps (markdown via Markdig, highlighting via ColorCode) live in a separate
+  opt-in lib (`SDK-Components`).
+- Split **on demand**, when a real dependency boundary appears — never pre-emptively per component.
 
 ---
 
