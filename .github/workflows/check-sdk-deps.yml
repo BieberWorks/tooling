@@ -5,6 +5,7 @@ name: SDK Dependency Leakage Checks (reusable)
 #   Rule 1 — *.Contracts / *.Presentation must not reference MudBlazor or AspNetCore.Components
 #   Rule 2 — *.UI(.Blazor) must not reference MudBlazor (only *.UI.Blazor.MudBlazor / *.UI.MudBlazor may)
 #   Rule 3 — No *.UI.Blazor.MudBlazor -> *.UI.Blazor.MudBlazor cross-reference (Skin-to-Skin)
+#             Exception: Components.UI.Blazor.MudBlazor is a recognised 2nd shared UI lib (whitelisted)
 #             Also enforced for legacy *.UI.MudBlazor -> *.UI.MudBlazor (transition period)
 #             Also enforced for *.UI.Avalonia -> *.UI.Avalonia (future-proof)
 #   Rule 4 — *.Presentation must not reference Microsoft.AspNetCore.Components or FrameworkReference
@@ -70,10 +71,16 @@ jobs:
           failed=0
 
           # New naming: *.UI.Blazor.MudBlazor -> *.UI.Blazor.MudBlazor
+          # Whitelist: BieberWorks.SDK.Components.UI.Blazor.MudBlazor is a recognised SECOND
+          # shared UI library (Markdown/RichText render components), alongside the shared
+          # BieberWorks.SDK.UI.Blazor.MudBlazor (which is auto-exempt, having no module segment).
+          # References TO Components are allowed; Components referencing other skins is still caught.
           for f in $(find . -name "*.UI.Blazor.MudBlazor.csproj"); do
-            if grep -qE "Include=\"BieberWorks\.SDK\.[^\"]+\.UI\.Blazor\.MudBlazor\"" "$f"; then
+            hits=$(grep -E "Include=\"BieberWorks\.SDK\.[^\"]+\.UI\.Blazor\.MudBlazor\"" "$f" \
+                   | grep -v "Include=\"BieberWorks\.SDK\.Components\.UI\.Blazor\.MudBlazor\"" || true)
+            if [ -n "$hits" ]; then
               echo "FAIL [Rule 3]: $f references another *.UI.Blazor.MudBlazor package"
-              grep -E "Include=\"BieberWorks\.SDK\.[^\"]+\.UI\.Blazor\.MudBlazor\"" "$f"
+              echo "$hits"
               failed=1
             fi
           done
