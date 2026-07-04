@@ -21,6 +21,33 @@ $script:TemplateRoot = if (Test-Path $localTemplates) {
 
 # --- Helper -----------------------------------------------------------------
 
+# Fuehrt ein natives Kommando (git/gh) aus, OHNE dass dessen stderr-AUSGABE unter
+# $ErrorActionPreference='Stop' faelschlich als terminierender Fehler gewertet wird.
+# Betrifft z.B. Gits harmlose "warning: LF will be replaced by CRLF"-Meldung oder ghs
+# Fortschritts-/Erfolgsmeldungen (beide landen auf stderr, obwohl Exit-Code 0 ist).
+# Abbruch NUR bei einem echten Fehler -> Exit-Code != 0. stdout wird durchgereicht,
+# sodass Aufrufer die Ausgabe weiter pipen/erfassen koennen.
+function Invoke-BwNative {
+    param(
+        [Parameter(Mandatory)][string]$Exe,
+        [Parameter(ValueFromRemainingArguments)][string[]]$Arguments
+    )
+    $prev = $ErrorActionPreference
+    $ErrorActionPreference = 'Continue'
+    try {
+        & $Exe @Arguments
+        if ($LASTEXITCODE -ne 0) {
+            throw "'$Exe $($Arguments -join ' ')' schlug fehl (Exit-Code $LASTEXITCODE)."
+        }
+    } finally {
+        $ErrorActionPreference = $prev
+    }
+}
+
+# Duenne Wrapper fuer die beiden nativen Tools, die wir nutzen.
+function Invoke-BwGit { Invoke-BwNative git @args }
+function Invoke-BwGh  { Invoke-BwNative gh  @args }
+
 # Schreibt UTF-8 OHNE BOM (PS 5.1 wuerde sonst UTF-16/BOM erzeugen). Pfad relativ zum CWD.
 function Write-Utf8NoBom {
     param([Parameter(Mandatory)][string]$Path, [Parameter(Mandatory)][AllowEmptyString()][string]$Content)
@@ -39,12 +66,12 @@ function Expand-BwTemplate {
 }
 
 function Get-BwGithubUser {
-    return (gh api user | ConvertFrom-Json).login
+    return (Invoke-BwGh api user | ConvertFrom-Json).login
 }
 
 # Ermittelt "Org/Repo" des Repos im CWD (fuer die Add-Scripts, die standalone laufen koennen).
 function Get-BwRepoIdentity {
-    $nwo = (gh repo view --json nameWithOwner -q .nameWithOwner)
+    $nwo = (Invoke-BwGh repo view --json nameWithOwner -q .nameWithOwner)
     if (-not $nwo) { throw "Konnte 'Org/Repo' nicht ermitteln - bist du im Repo-Ordner mit gh-Remote?" }
     $parts = $nwo.Split('/')
     return [pscustomobject]@{ Org = $parts[0]; Repo = $parts[1]; NameWithOwner = $nwo }
@@ -53,10 +80,10 @@ function Get-BwRepoIdentity {
 # git add/commit/push auf dem aktuellen Branch.
 function Invoke-BwCommitPush {
     param([Parameter(Mandatory)][string]$Message)
-    git add .
-    git commit -m $Message
-    $branch = (git rev-parse --abbrev-ref HEAD).Trim()
-    git push origin $branch
+    Invoke-BwGit add .
+    Invoke-BwGit commit -m $Message
+    $branch = (Invoke-BwGit rev-parse --abbrev-ref HEAD).Trim()
+    Invoke-BwGit push origin $branch
 }
 
 # Fuegt eine Datei als <File>-Eintrag in einen Solution-Folder einer .slnx ein.
@@ -140,7 +167,7 @@ function New-BwRepoBase {
     }
     New-Item -ItemType Directory -Force -Path $repoDir | Out-Null
     Set-Location -Path $repoDir
-    git init -b main
+    Invoke-BwGit init -b main
 
     # 2. Nur der Workflows-Ordner (src/tests/docs kommen erst in New-BwRepo / -TemplateRepo)
     New-Item -ItemType Directory -Force -Path '.github/workflows' | Out-Null
@@ -167,19 +194,19 @@ function New-BwRepoBase {
     Write-Utf8NoBom -Path '.github/workflows/ci.yml' -Content (Expand-BwTemplate 'workflows/ci.caller.yml')
 
     # 6. Initialer Commit + Remote-Repo + Push (pusht main)
-    git add .
-    git commit -m 'chore: initial repo scaffold (base, ci)'
-    Write-Host "==> Erstelle Remote-Repo $Org/$RepoName..." -ForegroundColor Cyan
-    gh repo create "$Owner/$RepoName" $visibility --source=. --remote=origin --push
+    Invoke-BwGit add .
+    Invoke-BwGit commit -m 'chore: initial repo scaffold (base, ci)'
+    Write-Host "==> Erstelle Remote-Repo $Owner/$RepoName..." -ForegroundColor Cyan
+    Invoke-BwGh repo create "$Owner/$RepoName" $visibility --source=. --remote=origin --push
 
     # 7. Branches: immer main + staging + dev
     Write-Host "==> Erstelle Branches (staging, dev)..." -ForegroundColor Cyan
-    git checkout -b staging; git push -u origin staging
-    git checkout -b dev;     git push -u origin dev
-    git checkout dev
+    Invoke-BwGit checkout -b staging; Invoke-BwGit push -u origin staging
+    Invoke-BwGit checkout -b dev;     Invoke-BwGit push -u origin dev
+    Invoke-BwGit checkout dev
 
     # 8. Default-Branch = dev
-    gh repo edit "$Owner/$RepoName" --default-branch dev
+    Invoke-BwGh repo edit "$Owner/$RepoName" --default-branch dev
 
     # 9. Branch Protection - nur bei PUBLIC (Free-Plan kann es fuer private nicht)
     if ($Public) {
@@ -249,13 +276,15 @@ function New-BwTemplateRepo {
         # 'Directory.Build.consumer.props.tmpl' = Consumer-App (kein PackagePrefix, kein NuGet-Publishing)
         [string]$DbPropsTemplate = 'Directory.Build.props.tmpl',
         [string]$ReadmeTemplate = 'README.module.tmpl',
+        # Zusaetzliche Argumente fuer 'dotnet new' (z.B. --NoDbContext true).
+        [string[]]$TemplateArgs = @(),
         [string]$TargetDirectory = '',
         [switch]$Public
     )
     New-BwRepoBase -RepoName $RepoName -Owner $Owner -DbPropsTemplate $DbPropsTemplate -ReadmeTemplate $ReadmeTemplate -TargetDirectory $TargetDirectory -Public:$Public
 
     $nameArg = if ($DotnetName) { $DotnetName } else { $RepoName }
-    Write-Host "==> Solution-Geruest + 'dotnet new $Template -n $nameArg'..." -ForegroundColor Cyan
+    Write-Host "==> Solution-Geruest + 'dotnet new $Template -n $nameArg $($TemplateArgs -join ' ')'..." -ForegroundColor Cyan
     New-Item -ItemType Directory -Force -Path 'docs' | Out-Null
     New-Item -ItemType File -Force -Path 'docs/.gitkeep' | Out-Null
     Write-Utf8NoBom -Path "$RepoName.slnx" -Content (Expand-BwTemplate 'solution.slnx.tmpl')
@@ -263,7 +292,7 @@ function New-BwTemplateRepo {
     # Template instanziieren in den Repo-Root. Das Template bringt seine Projekte
     # unter src/<Name> (+ tests/<Name>.Tests) mit; KEINE repo-globalen Dateien
     # (die liefert die Basis) und KEINE eigene .slnx.
-    dotnet new $Template -n $nameArg -o . --force
+    dotnet new $Template -n $nameArg -o . --force @TemplateArgs
 
     # Alle erzeugten csproj in die Solution aufnehmen (src/ und tests/ getrennt).
     Get-ChildItem -Path 'src'   -Recurse -Filter *.csproj -ErrorAction SilentlyContinue | ForEach-Object {
@@ -348,6 +377,9 @@ function New-BwModuleRepo {
         [Parameter(Mandatory)][string]$RepoName,
         [Parameter(Mandatory)][string]$Owner,
         [string]$TargetDirectory = '',
+        # Erzeugt ein Modul OHNE Persistenz (kein DbContext/EF/Migrations, In-Memory-Service).
+        # Fuer Module mit volatilem Zustand (z.B. RateLimiting).
+        [switch]$NoPersistence,
         [switch]$Public
     )
     if ($RepoName -notmatch '^SDK-') {
@@ -355,12 +387,14 @@ function New-BwModuleRepo {
     }
     $ModuleName = $RepoName -replace '^SDK-', ''
     $DotnetName = "BieberWorks.SDK.$ModuleName"
+    $templateArgs = if ($NoPersistence) { @('--NoDbContext', 'true') } else { @() }
     New-BwTemplateRepo `
         -RepoName $RepoName `
         -DotnetName $DotnetName `
         -Template 'bieberworks-module' `
         -Deploy 'packages' `
         -DbPropsTemplate 'Directory.Build.props.tmpl' `
+        -TemplateArgs $templateArgs `
         -Owner $Owner `
         -TargetDirectory $TargetDirectory `
         -Public:$Public
