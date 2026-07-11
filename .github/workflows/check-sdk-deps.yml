@@ -71,13 +71,15 @@ jobs:
           failed=0
 
           # New naming: *.UI.Blazor.MudBlazor -> *.UI.Blazor.MudBlazor
-          # Whitelist: BieberWorks.SDK.Components.UI.Blazor.MudBlazor is a recognised SECOND
-          # shared UI library (Markdown/RichText render components), alongside the shared
-          # BieberWorks.SDK.UI.Blazor.MudBlazor (which is auto-exempt, having no module segment).
-          # References TO Components are allowed; Components referencing other skins is still caught.
+          # Whitelist: BieberWorks.SDK.Components.UI.Blazor.MudBlazor and
+          # BieberWorks.SDK.Shell.UI.Blazor.MudBlazor are recognised SHARED UI libraries
+          # (Components = Markdown/RichText render components; Shell = the shared app-frame skin),
+          # alongside the shared BieberWorks.SDK.UI.Blazor.MudBlazor (auto-exempt, no module segment).
+          # References TO these are allowed; them referencing other skins is still caught.
           for f in $(find . -name "*.UI.Blazor.MudBlazor.csproj"); do
             hits=$(grep -E "Include=\"BieberWorks\.SDK\.[^\"]+\.UI\.Blazor\.MudBlazor\"" "$f" \
-                   | grep -v "Include=\"BieberWorks\.SDK\.Components\.UI\.Blazor\.MudBlazor\"" || true)
+                   | grep -v "Include=\"BieberWorks\.SDK\.Components\.UI\.Blazor\.MudBlazor\"" \
+                   | grep -v "Include=\"BieberWorks\.SDK\.Shell\.UI\.Blazor\.MudBlazor\"" || true)
             if [ -n "$hits" ]; then
               echo "FAIL [Rule 3]: $f references another *.UI.Blazor.MudBlazor package"
               echo "$hits"
