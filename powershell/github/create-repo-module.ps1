@@ -2,14 +2,20 @@
 # (Contracts + Impl + Tests) + NuGet-Package-Deployment. Branches main/staging/dev (Default dev).
 # HINWEIS: Das Template 'bieberworks-module' muss im DotnetTemplates-Paket existieren.
 #
-#   .\create-repo-module.ps1 -RepoName <Name> [-NoPersistence] [-Public]
+#   .\create-repo-module.ps1 -RepoName <Name> [-NoPersistence] [-WithClient] [-WithUi] [-NoArchTests] [-NoDocs] [-Public]
 #
 # -NoPersistence: Modul OHNE DbContext/EF/Migrations (In-Memory-Service), z.B. RateLimiting.
+# -WithClient: + X.Client (Http) + Contract-Tests; -WithUi: + Presentation/UI.Blazor/UI.Blazor.MudBlazor;
+# -NoArchTests / -NoDocs: Architektur-Tests bzw. docs/-Geruest weglassen (Default: enthalten).
 param(
     [Parameter(Mandatory)][string]$RepoName,
     [Parameter(Mandatory)][string]$Owner,
     [string]$TargetDirectory = '',
     [switch]$NoPersistence,
+    [switch]$WithClient,
+    [switch]$WithUi,
+    [switch]$NoArchTests,
+    [switch]$NoDocs,
     [switch]$Public
 )
 $ErrorActionPreference = 'Stop'
@@ -30,4 +36,4 @@ if (Get-Module -ListAvailable -Name BieberWorks.RepoSetup) {
 } else {
     Import-Module (Join-Path $PSScriptRoot '..\modules\BieberWorks.RepoSetup\BieberWorks.RepoSetup.psd1') -Force
 }
-New-BwModuleRepo -RepoName $RepoName -Owner $Owner -TargetDirectory $TargetDirectory -NoPersistence:$NoPersistence -Public:$Public
+New-BwModuleRepo -RepoName $RepoName -Owner $Owner -TargetDirectory $TargetDirectory -NoPersistence:$NoPersistence -WithClient:$WithClient -WithUi:$WithUi -NoArchTests:$NoArchTests -NoDocs:$NoDocs -Public:$Public

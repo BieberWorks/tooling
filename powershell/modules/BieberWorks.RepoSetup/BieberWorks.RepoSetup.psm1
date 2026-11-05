@@ -380,6 +380,14 @@ function New-BwModuleRepo {
         # Erzeugt ein Modul OHNE Persistenz (kein DbContext/EF/Migrations, In-Memory-Service).
         # Fuer Module mit volatilem Zustand (z.B. RateLimiting).
         [switch]$NoPersistence,
+        # Fuegt X.Client (HttpXClient) + Contract-Tests ueber beide Transporte hinzu.
+        [switch]$WithClient,
+        # Fuegt Presentation + UI.Blazor + UI.Blazor.MudBlazor (+ bUnit-Test) hinzu.
+        [switch]$WithUi,
+        # Laesst X.ArchitectureTests weg (Default: enthalten).
+        [switch]$NoArchTests,
+        # Laesst das docs/-Geruest weg (Default: enthalten).
+        [switch]$NoDocs,
         [switch]$Public
     )
     if ($RepoName -notmatch '^SDK-') {
@@ -387,7 +395,12 @@ function New-BwModuleRepo {
     }
     $ModuleName = $RepoName -replace '^SDK-', ''
     $DotnetName = "BieberWorks.SDK.$ModuleName"
-    $templateArgs = if ($NoPersistence) { @('--NoDbContext', 'true') } else { @() }
+    $templateArgs = @()
+    if ($NoPersistence) { $templateArgs += @('--NoDbContext', 'true') }
+    if ($WithClient)    { $templateArgs += @('--WithClient', 'true') }
+    if ($WithUi)        { $templateArgs += @('--WithUi', 'true') }
+    if ($NoArchTests)   { $templateArgs += @('--WithArchTests', 'false') }
+    if ($NoDocs)        { $templateArgs += @('--WithDocs', 'false') }
     New-BwTemplateRepo `
         -RepoName $RepoName `
         -DotnetName $DotnetName `
