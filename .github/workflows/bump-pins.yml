@@ -1,0 +1,83 @@
+name: Bump SDK pins (reusable)
+
+# Vorschlag (Fix 4, Etappe 2c): Ersatz fuer Dependabot (im Free-Plan fuer den privaten
+# GitHub-Packages-Feed nicht nutzbar). Liest die exakten Pins `[x.y.z]` der BwXxxVersion-Properties
+# aus Directory.Build.props, fragt je Paket die hoechste STABILE Version im Feed ab und oeffnet bei
+# Abweichung einen PR gegen den Ziel-Branch (kein Auto-Merge, kein Push auf dev/staging/main).
+#
+# Aufruf aus dem Repo (zeitgesteuert oder manuell):
+#   on: { schedule: [{ cron: "0 6 * * 1" }], workflow_dispatch: {} }
+#   jobs:
+#     bump:
+#       permissions: { contents: write, pull-requests: write }
+#       uses: BieberWorks/tooling/.github/workflows/bump-pins.yml@v1
+#       secrets:
+#         PACKAGES_TOKEN: ${{ secrets.PACKAGES_TOKEN }}
+# Voraussetzung (nicht von hier aenderbar): Repo-Einstellung "Allow GitHub Actions to create pull requests".
+# PRs, die mit GITHUB_TOKEN erstellt werden, loesen keine CI aus -> PR einmal schliessen/oeffnen.
+on:
+  workflow_call:
+    inputs:
+      base_branch:
+        type: string
+        default: dev
+    secrets:
+      PACKAGES_TOKEN:
+        required: true
+
+jobs:
+  bump:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+    concurrency:
+      group: bump-pins-${{ github.repository }}
+      cancel-in-progress: false
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        with:
+          ref: ${{ inputs.base_branch }}
+
+      - name: Update pins
+        id: bump
+        env:
+          PACKAGES_TOKEN: ${{ secrets.PACKAGES_TOKEN }}
+          OWNER: ${{ github.repository_owner }}
+        run: |
+          set -euo pipefail
+          changed=""
+          # Property -> Paket-ID aus den csproj (Include="<Id>" ... Version="$(BwXxxVersion)")
+          grep -rhoE 'Include="[^"]+"[^>]*Version="\$\(Bw[A-Za-z]+Version\)"' --include=*.csproj . \
+            | sed -E 's/Include="([^"]+)".*\$\((Bw[A-Za-z]+Version)\).*/\2 \1/' | sort -u > map.txt
+          while read -r prop id; do
+            cur=$(grep -oE "<$prop[^>]*>\[[^]]+\]</$prop>" Directory.Build.props | sed -E 's/.*\[([^]]+)\].*/\1/' | head -1 || true)
+            [ -n "$cur" ] || continue
+            lid=$(echo "$id" | tr '[:upper:]' '[:lower:]')
+            latest=$(curl -fsS -u "x:$PACKAGES_TOKEN" "https://nuget.pkg.github.com/${OWNER}/download/${lid}/index.json" \
+              | jq -r '.versions[]' | grep -v -- '-' | sort -V | tail -1 || true)
+            if [ -n "$latest" ] && [ "$latest" != "$cur" ] && [ "$(printf '%s\n%s\n' "$cur" "$latest" | sort -V | tail -1)" = "$latest" ]; then
+              sed -i -E "s#(<$prop[^>]*>)\[[^]]+\](</$prop>)#\1[$latest]\2#" Directory.Build.props
+              changed="$changed$prop: $cur -> $latest\n"
+            fi
+          done < map.txt
+          rm -f map.txt
+          printf '%b' "$changed" > bump-summary.txt
+          echo "changed=$([ -n "$changed" ] && echo true || echo false)" >> "$GITHUB_OUTPUT"
+
+      - name: Open PR
+        if: steps.bump.outputs.changed == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          BASE: ${{ inputs.base_branch }}
+        run: |
+          set -euo pipefail
+          branch="bw/bump-pins"
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git checkout -B "$branch"
+          git add Directory.Build.props
+          git commit -m "chore(deps): bump SDK pins to latest stable"
+          git push --force-with-lease origin "$branch"
+          gh pr create --base "$BASE" --head "$branch" --title "chore(deps): bump SDK pins to latest stable" \
+            --body-file bump-summary.txt || gh pr edit "$branch" --body-file bump-summary.txt

@@ -1,5 +1,6 @@
 {
   "SDK-Foundation": 0,
+  "SDK-ServiceKit": 0,
   "SDK-Presentation": 0,
   "SDK-UI": 1,
   "SDK-Components": 1,
@@ -17,5 +18,7 @@
   "SDK-Wallet": 4,
   "SDK-Localization": 4,
   "SDK-Maintenance": 5,
-  "SDK-Notifications": 5
+  "SDK-Notifications": 5,
+  "SDK-Identity": 5,
+  "SDK-Communication": 5
 }

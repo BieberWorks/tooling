@@ -8,7 +8,8 @@ name: Docker Publish (reusable)
 #   jobs:
 #     docker:
 #       uses: BieberWorks/tooling/.github/workflows/docker-publish.yml@v1
-#       secrets: inherit
+#       secrets:
+#         PACKAGES_TOKEN: ${{ secrets.PACKAGES_TOKEN }}
 #       with:
 #         dockerfile: Dockerfile
 on:
@@ -17,6 +18,14 @@ on:
       dockerfile:
         type: string
         default: Dockerfile
+      immutable_sha:
+        description: "Abbrechen, wenn das sha-Tag schon existiert. Default false: bei staging->main ohne Merge-Commit ist die SHA identisch und latest/staging muessen trotzdem bewegt werden."
+        type: boolean
+        default: false
+      force:
+        description: "Mit immutable_sha: vorhandenes sha-Tag bewusst ueberschreiben."
+        type: boolean
+        default: false
     secrets:
       PACKAGES_TOKEN:
         required: false
@@ -24,15 +33,31 @@ on:
 jobs:
   docker:
     runs-on: ubuntu-latest
+    concurrency:
+      group: docker-${{ github.repository }}-${{ github.ref }}
+      cancel-in-progress: false
     permissions:
       contents: read
       packages: write
     steps:
-      - uses: actions/checkout@v5
+      # Die gebaute Revision ist immer die Release-SHA: bei workflow_run der head_sha des
+      # ausloesenden Laufs (github.sha waere dort der Default-Branch-HEAD), sonst github.sha.
+      - name: Resolve build revision
+        id: rev
+        env:
+          RUN_HEAD_SHA: ${{ github.event.workflow_run.head_sha }}
+        run: |
+          sha="${RUN_HEAD_SHA:-$GITHUB_SHA}"
+          echo "sha=$sha" >> "$GITHUB_OUTPUT"
+          echo "short=${sha:0:7}" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        with:
+          ref: ${{ steps.rev.outputs.sha }}
 
       - name: Setup .NET
         if: hashFiles('**/*.csproj') != ''
-        uses: actions/setup-dotnet@v5
+        uses: actions/setup-dotnet@26b0ec14cb23fa6904739307f278c14f94c95bf1 # v5
         with:
           dotnet-version: '10.0.x'
 
@@ -49,27 +74,48 @@ jobs:
         if: hashFiles('*.slnx', '*.sln') != ''
         run: dotnet test -c Release
 
-      - uses: docker/setup-buildx-action@v3
+      - uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3
 
       - name: Login to GHCR
-        uses: docker/login-action@v3
+        uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
+      - name: Guard immutable tag
+        id: immutable
+        env:
+          IMAGE: ghcr.io/${{ github.repository }}
+          SHORT: ${{ steps.rev.outputs.short }}
+          FORCE: ${{ inputs.force }}
+          IMMUTABLE: ${{ inputs.immutable_sha }}
+        run: |
+          # manifest inspect: Exit 0 = Tag existiert. Anderer Fehler als "nicht gefunden" bricht ebenfalls ab.
+          if out=$(docker manifest inspect "${IMAGE,,}:sha-${SHORT}" 2>&1); then
+            if [ "$IMMUTABLE" != "true" ]; then echo "::notice::${IMAGE,,}:sha-${SHORT} existiert bereits (gleiche SHA, bewegliche Tags werden neu gesetzt)."; exit 0; fi
+            if [ "$FORCE" = "true" ]; then echo "::warning::${IMAGE,,}:sha-${SHORT} existiert, wird per force ueberschrieben."; exit 0; fi
+            echo "::error::${IMAGE,,}:sha-${SHORT} existiert bereits; Tags sind unveraenderlich (Override: input force)."; exit 1
+          fi
+          case "$out" in
+            *"no such manifest"*|*"manifest unknown"*|*"not found"*) echo "Tag frei." ;;
+            *) echo "::error::manifest inspect lieferte unerwartet: $out"; exit 1 ;;
+          esac
+
       - name: Docker metadata
         id: meta
-        uses: docker/metadata-action@v5
+        uses: docker/metadata-action@c299e40c65443455700f0fdfc63efafe5b349051 # v5
         with:
           images: ghcr.io/${{ github.repository }}
           tags: |
             type=raw,value=latest,enable=${{ github.ref == 'refs/heads/main' }}
             type=raw,value=staging,enable=${{ github.ref == 'refs/heads/staging' }}
-            type=sha,prefix=sha-
+            type=raw,value=sha-${{ steps.rev.outputs.short }}
+          labels: |
+            org.opencontainers.image.revision=${{ steps.rev.outputs.sha }}
 
       - name: Build & push
-        uses: docker/build-push-action@v6
+        uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6
         with:
           context: .
           file: ${{ inputs.dockerfile }}

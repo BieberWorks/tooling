@@ -8,7 +8,10 @@ jobs:
       contents: write
       packages: write
     uses: BieberWorks/tooling/.github/workflows/nuget-release.yml@v1
-    secrets: inherit
+    secrets:
+      PACKAGES_TOKEN: ${{ secrets.PACKAGES_TOKEN }}
+    # with:
+    #   require_stable_base: true   # Neu-Repos: Basis-Tag v0.0.0 am Root-Commit erzwingen
 
   notify-docs:
     needs: release
@@ -16,7 +19,7 @@ jobs:
     if: github.ref == 'refs/heads/main'
     steps:
       - name: Dispatch docs update
-        uses: peter-evans/repository-dispatch@v3
+        uses: peter-evans/repository-dispatch@ff45666b9427631e3450c54a1bcbee4d9ff4d7c0 # v3
         with:
           token: ${{ secrets.DISPATCH_TOKEN }}
           repository: BieberWorks/SDK-Docs

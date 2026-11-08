@@ -1,0 +1,165 @@
+name: Docker Publish (__IMAGE__)
+
+# Builds and pushes the __IMAGE__ image to GHCR after the NuGet release workflow finished for a tagged commit.
+# Tags (no "latest" on purpose, consumers pin versions):
+#   stable release  1.4.2 -> 1.4.2, 1.4, 1    (major tag only from 1.x on)
+#   pre-release     1.5.0-rc.0 -> 1.5.0-rc.0
+#   every build     sha-<release commit> (head_sha of the release run, not the default-branch HEAD)
+# The workflow is inert until a release tag exists. Manual run: provide the version (without "v").
+on:
+  workflow_run:
+    workflows: ["Release & Publish"]
+    types: [completed]
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Image version without the leading v (for example 0.1.0-rc.0)"
+        required: true
+        type: string
+      force:
+        description: "Overwrite an existing image tag (tags are immutable otherwise)"
+        required: false
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+  packages: write
+
+jobs:
+  image:
+    concurrency:
+      group: docker-__IMAGE__-${{ inputs.version || github.event.workflow_run.head_sha }}
+      cancel-in-progress: false
+    if: github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success'
+    runs-on: ubuntu-latest
+    steps:
+      # The image is always built from, and labelled with, the release commit: for workflow_run that is
+      # head_sha of the triggering run (github.sha would be the default branch HEAD = dev).
+      - name: Resolve build revision
+        id: rev
+        env:
+          RUN_HEAD_SHA: ${{ github.event.workflow_run.head_sha }}
+        run: |
+          sha="${RUN_HEAD_SHA:-$GITHUB_SHA}"
+          echo "sha=$sha" >> "$GITHUB_OUTPUT"
+          echo "short=${sha:0:7}" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        with:
+          fetch-depth: 0
+          ref: ${{ steps.rev.outputs.sha }}
+
+      - name: Resolve version
+        id: version
+        env:
+          INPUT_VERSION: ${{ inputs.version }}
+        run: |
+          if [ -n "$INPUT_VERSION" ]; then v="$INPUT_VERSION"; else
+            v=$(git tag --points-at HEAD | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+' | sed 's/^v//' | sort -V | tail -1)
+          fi
+          echo "version=$v" >> "$GITHUB_OUTPUT"
+          [ -n "$v" ] || echo "No release tag on this commit; nothing to publish."
+
+      - name: Setup .NET
+        if: steps.version.outputs.version != ''
+        uses: actions/setup-dotnet@26b0ec14cb23fa6904739307f278c14f94c95bf1 # v5
+        with:
+          dotnet-version: '10.0.x'
+
+      - name: Test (image gate)
+        if: steps.version.outputs.version != ''
+        env:
+          PACKAGES_TOKEN: ${{ secrets.PACKAGES_TOKEN }}
+        run: |
+          dotnet nuget remove source bieberworks-local || true
+          dotnet nuget add source "https://nuget.pkg.github.com/${{ github.repository_owner }}/index.json" \
+            --name bieberworks --username "${{ github.actor }}" \
+            --password "$PACKAGES_TOKEN" --store-password-in-clear-text
+          dotnet test __SLN__ -c Release
+
+      - name: Prerelease gate (stable image must not depend on prerelease SDK packages)
+        if: steps.version.outputs.version != ''
+        env:
+          IMAGE_VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          case "$IMAGE_VERSION" in *-*) echo "Prerelease image $IMAGE_VERSION: gate not applied"; exit 0;; esac
+          dotnet restore __API_CSPROJ__
+          dotnet list __API_CSPROJ__ package --include-transitive > packages.txt
+          if grep -E "> BieberWorks[.]SDK[.][^ ]+ .* [0-9]+[.][0-9]+[.][0-9]+-[^ ]+ *$" packages.txt; then
+            echo "::error::Stable image would contain prerelease BieberWorks packages"; exit 1
+          fi
+
+      - uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3
+        if: steps.version.outputs.version != ''
+
+      - name: Login to GHCR
+        if: steps.version.outputs.version != ''
+        uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Guard immutable tags
+        if: steps.version.outputs.version != ''
+        env:
+          OWNER: ${{ github.repository_owner }}
+          IMAGE_VERSION: ${{ steps.version.outputs.version }}
+          SHORT: ${{ steps.rev.outputs.short }}
+          FORCE: ${{ inputs.force }}
+        run: |
+          image="ghcr.io/${OWNER,,}/__IMAGE__"
+          for tag in "$IMAGE_VERSION" "sha-$SHORT"; do
+            if out=$(docker manifest inspect "$image:$tag" 2>&1); then
+              if [ "$FORCE" = "true" ]; then echo "::warning::$image:$tag exists and is overwritten (force)"; continue; fi
+              echo "::error::$image:$tag already exists; tags are immutable (override: workflow_dispatch input force)"; exit 1
+            fi
+            case "$out" in
+              *"no such manifest"*|*"manifest unknown"*|*"not found"*) echo "$tag is free" ;;
+              *) echo "::error::unexpected manifest inspect result: $out"; exit 1 ;;
+            esac
+          done
+
+      - name: Docker metadata
+        if: steps.version.outputs.version != ''
+        id: meta
+        uses: docker/metadata-action@c299e40c65443455700f0fdfc63efafe5b349051 # v5
+        with:
+          images: ghcr.io/${{ github.repository_owner }}/__IMAGE__
+          flavor: latest=false
+          tags: |
+            type=semver,pattern={{version}},value=${{ steps.version.outputs.version }}
+            type=semver,pattern={{major}}.{{minor}},value=${{ steps.version.outputs.version }}
+            type=semver,pattern={{major}},value=${{ steps.version.outputs.version }}
+            type=raw,value=sha-${{ steps.rev.outputs.short }}
+          labels: |
+            org.opencontainers.image.revision=${{ steps.rev.outputs.sha }}
+
+      - name: Build and push
+        id: push
+        if: steps.version.outputs.version != ''
+        uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6
+        with:
+          context: .
+          file: Dockerfile
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          secrets: |
+            nuget_token=${{ secrets.PACKAGES_TOKEN }}
+          build-args: |
+            BW_COMMIT=${{ steps.rev.outputs.sha }}
+            BW_VERSION=${{ steps.version.outputs.version }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Digest in the job summary
+        if: steps.version.outputs.version != ''
+        env:
+          DIGEST: ${{ steps.push.outputs.digest }}
+          IMAGE_VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          echo "### Image ghcr.io/${{ github.repository_owner }}/__IMAGE__" >> "$GITHUB_STEP_SUMMARY"
+          echo "version: $IMAGE_VERSION" >> "$GITHUB_STEP_SUMMARY"
+          echo "digest: $DIGEST" >> "$GITHUB_STEP_SUMMARY"

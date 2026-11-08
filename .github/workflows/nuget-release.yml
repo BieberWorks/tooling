@@ -5,9 +5,15 @@ name: NuGet Release (reusable)
 #   jobs:
 #     release:
 #       uses: BieberWorks/tooling/.github/workflows/nuget-release.yml@v1
-#       secrets: inherit
+#       secrets:
+#         PACKAGES_TOKEN: ${{ secrets.PACKAGES_TOKEN }}
 on:
   workflow_call:
+    inputs:
+      require_stable_base:
+        description: "Auf main hart abbrechen, wenn kein echter stabiler Basis-Tag (z. B. v0.0.0 am Root-Commit) existiert (verhindert leere Release-Notes beim Erst-Release)."
+        type: boolean
+        default: false
     secrets:
       PACKAGES_TOKEN:
         required: false
@@ -19,6 +25,10 @@ on:
 jobs:
   release:
     runs-on: ubuntu-latest
+    # Zwei schnelle Pushes duerfen nicht gleichzeitig dieselbe Version berechnen/taggen.
+    concurrency:
+      group: release-${{ github.repository }}-${{ github.ref }}
+      cancel-in-progress: false
     permissions:
       contents: write
       packages: write
@@ -26,7 +36,7 @@ jobs:
       new_version: ${{ steps.tagger.outputs.new_version }}
     steps:
       - name: Checkout
-        uses: actions/checkout@v5
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
         with:
           fetch-depth: 0
 
@@ -35,17 +45,40 @@ jobs:
       # entsteht kein verwaister -rc/final-Tag, der vor einem Rerun geloescht werden muesste.
       - name: Compute version (SemVer, dry-run)
         id: version
-        uses: mathieudutour/github-tag-action@v6.2
+        uses: mathieudutour/github-tag-action@a22cf08638b34d5badda920f9daf6e72c477b07b # v6.2
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
           release_branches: main
           pre_release_branches: staging
-          append_to_pre_release_tag: rc
+          # Der Tagger nimmt als "previous tag" den HOECHSTEN semver-Tag, der Stable ODER ein
+          # Prerelease mit passender Kennung ist (action.ts: gte(latestTag, latestPrereleaseTag)).
+          # Auf main darf nur der letzte STABILE Tag Basis sein, sonst decken Version und Release-Notes
+          # nur den Bereich seit dem RC-Tag ab (Auth v3.8.0, leere Notes bei Neu-Repos).
+          # Kennung ohne Treffer in allen Tags => latestPrereleaseTag ist leer => Basis = letzter Stable-Tag.
+          append_to_pre_release_tag: ${{ github.ref == 'refs/heads/main' && 'stable-only' || 'rc' }}
           dry_run: true
+
+      - name: Guard previous tag (main)
+        if: github.ref == 'refs/heads/main' && steps.version.outputs.new_version != ''
+        env:
+          PREVIOUS_TAG: ${{ steps.version.outputs.previous_tag }}
+          REQUIRE_BASE: ${{ inputs.require_stable_base }}
+          NEW_VERSION: ${{ steps.version.outputs.new_version }}
+        run: |
+          echo "previous_tag=$PREVIOUS_TAG new_version=$NEW_VERSION"
+          case "$PREVIOUS_TAG" in
+            *-*) echo "::error::Release auf main wuerde auf Prerelease-Tag $PREVIOUS_TAG aufsetzen (Notes/Version unvollstaendig)."; exit 1;;
+          esac
+          if ! git rev-parse -q --verify "refs/tags/$PREVIOUS_TAG" >/dev/null; then
+            echo "::warning::Kein stabiler Basis-Tag im Repo ($PREVIOUS_TAG ist nur der Fallback des Taggers): Release-Notes waeren leer."
+            if [ "$REQUIRE_BASE" = "true" ]; then
+              echo "::error::Basis-Tag fehlt. Einmalig: git tag v0.0.0 \$(git rev-list --max-parents=0 HEAD | tail -1) && git push origin v0.0.0"; exit 1
+            fi
+          fi
 
       - name: Setup .NET
         if: hashFiles('**/*.csproj') != ''
-        uses: actions/setup-dotnet@v5
+        uses: actions/setup-dotnet@26b0ec14cb23fa6904739307f278c14f94c95bf1 # v5
         with:
           dotnet-version: '10.0.x'
 
@@ -74,12 +107,17 @@ jobs:
       - name: Create tag (SemVer)
         id: tagger
         if: steps.version.outputs.new_version != ''
-        uses: mathieudutour/github-tag-action@v6.2
+        uses: mathieudutour/github-tag-action@a22cf08638b34d5badda920f9daf6e72c477b07b # v6.2
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
           release_branches: main
           pre_release_branches: staging
-          append_to_pre_release_tag: rc
+          # Der Tagger nimmt als "previous tag" den HOECHSTEN semver-Tag, der Stable ODER ein
+          # Prerelease mit passender Kennung ist (action.ts: gte(latestTag, latestPrereleaseTag)).
+          # Auf main darf nur der letzte STABILE Tag Basis sein, sonst decken Version und Release-Notes
+          # nur den Bereich seit dem RC-Tag ab (Auth v3.8.0, leere Notes bei Neu-Repos).
+          # Kennung ohne Treffer in allen Tags => latestPrereleaseTag ist leer => Basis = letzter Stable-Tag.
+          append_to_pre_release_tag: ${{ github.ref == 'refs/heads/main' && 'stable-only' || 'rc' }}
 
       - name: Pin floating deps to stable (main only)
         if: github.ref == 'refs/heads/main'
@@ -99,7 +137,7 @@ jobs:
 
       - name: Create GitHub Release
         if: github.ref == 'refs/heads/main' && steps.tagger.outputs.new_tag != ''
-        uses: softprops/action-gh-release@v3
+        uses: softprops/action-gh-release@8a0cd651e5b2365bd640854a3fa5dfc70e4875f3 # v3
         with:
           tag_name: ${{ steps.tagger.outputs.new_tag }}
           name: Release ${{ steps.tagger.outputs.new_tag }}
