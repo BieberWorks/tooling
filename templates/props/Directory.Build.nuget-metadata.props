@@ -1,0 +1,31 @@
+<Project>
+  <!--
+    Vorschlag (Fix 4, Etappe 2c, M3): zentrale NuGet-Metadaten + reproduzierbare Builds.
+    Einbindung: Inhalt in die Directory.Build.props jedes Modul-/Service-Repos uebernehmen
+    (oder per <Import> eines gemeinsamen Stands). RepositoryUrl steht schon in den Repo-Props.
+
+    Hinweis GitHub Packages: kein Symbolserver und kein snupkg-Support -> Symbole eingebettet
+    (DebugType=embedded) + SourceLink (im .NET SDK >= 8 fuer GitHub enthalten).
+  -->
+  <PropertyGroup Condition="'$(MSBuildProjectExtension)' == '.csproj'">
+    <PackageProjectUrl>$(RepositoryUrl)</PackageProjectUrl>
+    <RepositoryType>git</RepositoryType>
+    <PublishRepositoryUrl>true</PublishRepositoryUrl>
+    <EmbedUntrackedSources>true</EmbedUntrackedSources>
+    <DebugType>embedded</DebugType>
+    <Deterministic>true</Deterministic>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
+    <PackageLicenseFile>LICENSE</PackageLicenseFile>
+  </PropertyGroup>
+
+  <!-- Pfadnormalisierung nur in CI (sonst stoert sie lokales Debugging). -->
+  <PropertyGroup Condition="'$(GITHUB_ACTIONS)' == 'true'">
+    <ContinuousIntegrationBuild>true</ContinuousIntegrationBuild>
+  </PropertyGroup>
+
+  <!-- README.md und LICENSE aus dem Repo-Root ins Paket (proprietaere Lizenz: Datei statt SPDX-Ausdruck). -->
+  <ItemGroup Condition="'$(MSBuildProjectExtension)' == '.csproj' And '$(IsPackable)' != 'false'">
+    <None Include="$(MSBuildThisFileDirectory)README.md" Pack="true" PackagePath="/" Visible="false" Condition="Exists('$(MSBuildThisFileDirectory)README.md')" />
+    <None Include="$(MSBuildThisFileDirectory)LICENSE" Pack="true" PackagePath="/" Visible="false" Condition="Exists('$(MSBuildThisFileDirectory)LICENSE')" />
+  </ItemGroup>
+</Project>
